@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#10151c">
+    <meta name="description" content="Planificateur de craft Hypixel SkyBlock : recettes, arbre de craft, stocks et progression.">
+    <title>SkyCraft — calculateur de craft Hypixel SkyBlock</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="SkyCraft, accueil">
+        <span class="brand-mark">S</span>
+        <span>SKY<span class="brand-accent">CRAFT</span></span>
+      </a>
+      <div class="data-status"><span class="status-dot"></span><span id="data-status">Chargement des recettes…</span></div>
+      <a class="top-link" href="#inventaire">Mon inventaire <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main class="page-shell">
+      <section class="intro">
+        <p class="eyebrow"><span class="eyebrow-line"></span> TON ATELIER SKYBLOCK</p>
+        <h1>Prépare ton prochain craft<span>.</span></h1>
+        <p class="intro-copy">Tes stocks en premier, ton plan juste en dessous. Trouve les ressources à réunir sans te perdre dans l’arbre.</p>
+      </section>
+
+      <div class="top-tools-grid">
+      <section id="inventaire" class="panel inventory-overview" aria-labelledby="inventory-overview-title">
+        <div class="panel-heading compact-heading inventory-overview-heading">
+          <div><p class="section-index">01 / TON INVENTAIRE</p><h2 id="inventory-overview-title">Ce que tu as déjà</h2></div>
+          <div class="inventory-heading-actions">
+            <label class="visual-pack-control"><span class="field-label">VISUELS</span><select id="visual-pack" aria-label="Choisir le pack de visuels"><option value="fursky">FurSky Reborn</option><option value="hypixel">Hypixel SkyBlock</option></select></label>
+            <span class="inventory-count" id="owned-item-count">0 objet</span>
+          </div>
+        </div>
+        <p class="panel-description">Ajoute tes ressources de rang 1 ou synchronise ton inventaire Hypixel plus bas. Les quantités restent sauvegardées sur cet appareil.</p>
+        <form id="inventory-add-form" class="inventory-add-form">
+          <label class="inventory-search-field">
+            <span class="field-label">AJOUTER UNE RESSOURCE DE RANG 1</span>
+            <input id="inventory-item-search" type="search" list="inventory-item-options" placeholder="Ex. Diamond, Enchanted Bone…" autocomplete="off" required>
+            <datalist id="inventory-item-options"></datalist>
+          </label>
+          <label class="inventory-amount-field">
+            <span class="field-label">QUANTITÉ</span>
+            <input id="inventory-item-amount" type="number" min="1" max="999999999" value="1" inputmode="numeric">
+          </label>
+          <button class="secondary-button inventory-add-button" type="submit">Ajouter au stock <span aria-hidden="true">＋</span></button>
+        </form>
+        <p id="inventory-message" class="inline-message" role="status"></p>
+        <div id="saved-inventory" class="saved-inventory"></div>
+      </section>
+
+      <section class="planner panel" aria-labelledby="planner-title">
+        <div class="panel-heading">
+          <div>
+            <p class="section-index">02 / PLANIFIER</p>
+            <h2 id="planner-title">Qu’est-ce qu’on fabrique ?</h2>
+          </div>
+          <span class="heading-icon" aria-hidden="true">⌕</span>
+        </div>
+        <form id="planner-form" class="planner-form">
+          <label class="search-field">
+            <span class="field-label">OBJET À CRAFTER</span>
+            <span class="input-wrap"><span class="search-icon" aria-hidden="true">⌕</span><input id="item-search" type="search" placeholder="Ex. Enchanted Diamond" autocomplete="off" required aria-describedby="search-hint"></span>
+            <span id="search-hint" class="field-hint">Recherche parmi les objets craftables.</span>
+            <div id="suggestions" class="suggestions" role="listbox" hidden></div>
+          </label>
+          <label class="quantity-field">
+            <span class="field-label">QUANTITÉ</span>
+            <span class="input-wrap"><button class="stepper" type="button" data-step="-1" aria-label="Diminuer la quantité">−</button><input id="target-quantity" type="number" min="1" max="999999" value="1" inputmode="numeric"><button class="stepper" type="button" data-step="1" aria-label="Augmenter la quantité">+</button></span>
+          </label>
+          <button class="primary-button" type="submit">Calculer les ressources <span aria-hidden="true">→</span></button>
+        </form>
+        <p id="planner-message" class="inline-message" role="status"></p>
+      </section>
+      </div>
+
+      <section id="results" class="results-section" hidden aria-live="polite">
+        <div class="results-heading">
+          <div><p class="section-index">03 / TON PLAN</p><h2 id="result-title"></h2></div>
+          <span id="target-badge" class="target-badge"></span>
+        </div>
+
+        <div class="summary-grid">
+          <article class="summary-card"><span class="summary-label">MATÉRIAUX À PRÉVOIR</span><strong id="summary-materials">0</strong><span class="summary-note">types de ressources</span></article>
+          <article class="summary-card"><span class="summary-label">DÉJÀ DANS TON STOCK</span><strong id="summary-owned">0</strong><span class="summary-note">unités utilisées</span></article>
+          <article class="summary-card"><span class="summary-label">ENCORE NÉCESSAIRE</span><strong id="summary-missing">0</strong><span class="summary-note">unités à trouver</span></article>
+        </div>
+
+        <div class="workspace-grid">
+          <section class="panel inventory-panel" aria-labelledby="inventory-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="section-index">STOCKS POUR CE CRAFT</p><h2 id="inventory-title">Ressources à réunir</h2></div>
+              <span class="inventory-count" id="inventory-count"></span>
+            </div>
+            <p class="panel-description">Seules les ressources de rang 0 (matières premières) sont listées. Les stocks se mettent à jour automatiquement.</p>
+            <div id="materials-list" class="materials-list"></div>
+            <div class="inventory-footer"><span><span class="status-dot"></span> Stock sauvegardé sur cet appareil</span><button id="clear-inventory" class="text-button" type="button">Tout effacer</button></div>
+          </section>
+
+          <section class="panel tree-panel" aria-labelledby="tree-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="section-index">04 / VISUALISATION</p><h2 id="tree-title">Arbre de craft</h2></div>
+              <span class="tree-icon" aria-hidden="true">⌘</span>
+            </div>
+            <p class="tree-hint">Ouvre une branche pour voir ses ingrédients. Les quantités indiquent le besoin à chaque étape.</p>
+            <div id="recipe-choice-wrap" class="recipe-choice-wrap" hidden>
+              <label for="recipe-choice" class="field-label">RECETTE À UTILISER</label>
+              <select id="recipe-choice"></select>
+            </div>
+            <div id="craft-tree" class="craft-tree"></div>
+            <div class="tree-legend"><span><i class="legend-dot owned"></i> Possédé</span><span><i class="legend-dot missing"></i> À trouver</span><span><i class="legend-dot craft"></i> À fabriquer</span></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="panel api-panel" aria-labelledby="api-title">
+        <div class="api-copy">
+          <p class="section-index">OPTIONNEL / SYNCHRONISATION</p>
+          <h2 id="api-title">Ton inventaire Hypixel</h2>
+          <p>Importe les objets de ton profil avec l’API Hypixel, ou continue à renseigner tes stocks manuellement. L’API officielle exige une clé : le pseudo seul ne permet pas de lire l’inventaire.</p>
+          <p class="privacy-note"><span aria-hidden="true">⌑</span> Ta clé API est utilisée uniquement dans ton navigateur et n’est jamais enregistrée par cette page.</p>
+        </div>
+        <form id="api-form" class="api-form">
+          <label><span class="field-label">CLÉ API HYPIXEL</span><input id="api-key" type="password" placeholder="Colle ta clé ici" autocomplete="off" required></label>
+          <label><span class="field-label">UUID MINECRAFT</span><input id="player-uuid" type="text" placeholder="UUID du joueur" autocomplete="off" required></label>
+          <button id="load-profiles" class="secondary-button" type="submit">Charger mes profils <span aria-hidden="true">→</span></button>
+          <label id="profile-picker-wrap" class="profile-picker" hidden><span class="field-label">PROFIL SKYBLOCK</span><select id="profile-picker"></select></label>
+          <button id="import-profile" class="primary-button import-button" type="button" hidden>Importer l’inventaire</button>
+          <p id="api-message" class="inline-message" role="status"></p>
+        </form>
+      </section>
+
+      <footer class="page-footer">
+        <span>SkyCraft <span aria-hidden="true">·</span> Outil communautaire non affilié à Hypixel</span>
+        <span>Recettes fournies par <a href="https://github.com/SkyblockRepo/Repo" target="_blank" rel="noreferrer">SkyblockRepo</a></span>
+      </footer>
+    </main>
+  </body>
+</html>
