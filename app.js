@@ -1,5 +1,6 @@
 const STORAGE_KEY = "skycraft.inventory.v1";
 const VISUAL_PACK_KEY = "skycraft.visual-pack.v1";
+const COMPLETED_CRAFTS_KEY = "skycraft.completed-crafts.v1";
 const NBT_INVENTORY_FIELDS = new Set([
   "inv_contents", "ender_chest_contents", "talisman_bag", "wardrobe_contents",
   "bag_contents", "fishing_bag", "potion_bag", "personal_vault_contents",
@@ -19,6 +20,7 @@ const elements = {
   summaryMaterials: document.querySelector("#summary-materials"),
   summaryOwned: document.querySelector("#summary-owned"),
   summaryMissing: document.querySelector("#summary-missing"),
+  summaryForge: document.querySelector("#summary-forge"),
   inventoryCount: document.querySelector("#inventory-count"),
   materials: document.querySelector("#materials-list"),
   tree: document.querySelector("#craft-tree"),
@@ -55,9 +57,11 @@ const elements = {
 let items = [];
 let itemById = new Map();
 let visualsById = new Map();
+let forgeTimesById = new Map();
 let baseResourceIds = new Set();
 let inventory = readInventory();
 let visualPack = readVisualPack();
+let completedCrafts = readCompletedCrafts();
 let selectedItem = null;
 let currentPlan = null;
 let loadedProfiles = [];
@@ -83,6 +87,17 @@ function readInventory() {
   }
 }
 
+function readCompletedCrafts() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(COMPLETED_CRAFTS_KEY) || "{}");
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return {};
+    return Object.fromEntries(Object.entries(saved).filter(([, completed]) => completed === true));
+  } catch (error) {
+    console.warn("Impossible de lire les objets terminés sauvegardés.", error);
+    return {};
+  }
+}
+
 function saveInventory() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(inventory));
@@ -92,8 +107,31 @@ function saveInventory() {
   }
 }
 
+function saveCompletedCrafts() {
+  try {
+    localStorage.setItem(COMPLETED_CRAFTS_KEY, JSON.stringify(completedCrafts));
+  } catch (error) {
+    elements.plannerMessage.textContent = "Le navigateur n’a pas pu sauvegarder les objets terminés localement.";
+    console.error("Impossible de sauvegarder les objets terminés.", error);
+  }
+}
+
 function formatNumber(value) {
   return new Intl.NumberFormat("fr-FR").format(value);
+}
+
+function formatDuration(seconds) {
+  let remaining = Math.max(0, Math.floor(seconds));
+  const units = [[86400, "j"], [3600, "h"], [60, "min"], [1, "s"]];
+  const parts = [];
+  for (const [size, label] of units) {
+    const amount = Math.floor(remaining / size);
+    if (amount) {
+      parts.push(`${formatNumber(amount)} ${label}`);
+      remaining %= size;
+    }
+  }
+  return parts.length ? parts.join(" ") : "0 s";
 }
 
 function getItemName(id) {
@@ -331,7 +369,13 @@ function calculatePlan() {
   const totals = {};
   const used = {};
   const tree = makePlan(selectedItem.id, requested, pool, totals, used);
-  return { tree, totals, used, requested };
+  return { tree, totals, used, requested, totalForgeSeconds: calculateForgeSeconds(tree) };
+}
+
+function calculateForgeSeconds(node) {
+  const duration = forgeTimesById.get(node.id) || 0;
+  const ownTime = node.craftCount > 0 ? duration * node.craftCount : 0;
+  return ownTime + node.children.reduce((sum, child) => sum + calculateForgeSeconds(child), 0);
 }
 
 function sumValues(record) {
@@ -355,9 +399,10 @@ function createProgress(used, required, className = "") {
   return wrapper;
 }
 
-function renderTreeNode(node, root = false) {
+function renderTreeNode(node, root = false, nodeKey = `root:${node.id}`) {
   const card = document.createElement("div");
-  card.className = `node-card${root ? " node-card-root" : ""}`;
+  const isComplete = completedCrafts[nodeKey] === true;
+  card.className = `node-card${root ? " node-card-root" : ""}${isComplete ? " is-complete" : ""}`;
   card.dataset.state = node.cycle ? "error" : node.craftCount ? "craft" : node.remaining ? "missing" : "owned";
   const top = document.createElement("div");
   top.className = "node-topline";
@@ -368,7 +413,26 @@ function renderTreeNode(node, root = false) {
   const quantity = document.createElement("span");
   quantity.className = "node-quantity";
   quantity.textContent = `× ${formatNumber(node.required)}`;
-  top.append(title, quantity);
+  const completionLabel = document.createElement("label");
+  completionLabel.className = "node-complete-toggle";
+  completionLabel.title = isComplete ? "Objet marqué comme terminé" : "Marquer cet objet comme terminé";
+  const completionInput = document.createElement("input");
+  completionInput.type = "checkbox";
+  completionInput.checked = isComplete;
+  completionInput.setAttribute("aria-label", `${isComplete ? "Retirer" : "Marquer"} ${node.name} ${isComplete ? "des objets terminés" : "comme terminé"}`);
+  const completionText = document.createElement("span");
+  completionText.textContent = "Fait";
+  completionLabel.append(completionInput, completionText);
+  completionInput.addEventListener("click", event => event.stopPropagation());
+  completionInput.addEventListener("change", () => {
+    if (completionInput.checked) completedCrafts[nodeKey] = true;
+    else delete completedCrafts[nodeKey];
+    card.classList.toggle("is-complete", completionInput.checked);
+    completionInput.setAttribute("aria-label", `${completionInput.checked ? "Retirer" : "Marquer"} ${node.name} ${completionInput.checked ? "des objets terminés" : "comme terminé"}`);
+    completionLabel.title = completionInput.checked ? "Objet marqué comme terminé" : "Marquer cet objet comme terminé";
+    saveCompletedCrafts();
+  });
+  top.append(title, quantity, completionLabel);
 
   const detail = document.createElement("div");
   detail.className = "node-detail";
@@ -393,6 +457,13 @@ function renderTreeNode(node, root = false) {
   }
 
   card.append(top, detail, createProgress(node.owned, node.required, "node-progress"));
+  const forgeDuration = forgeTimesById.get(node.id);
+  if (forgeDuration && node.craftCount > 0) {
+    const forgeDetail = document.createElement("div");
+    forgeDetail.className = "node-forge-time";
+    forgeDetail.textContent = `Forge · ${formatDuration(forgeDuration * node.craftCount)}`;
+    card.append(forgeDetail);
+  }
   if (!node.children.length) {
     const leaf = document.createElement("div");
     leaf.className = `tree-node${root ? " tree-root" : ""}`;
@@ -410,7 +481,9 @@ function renderTreeNode(node, root = false) {
   if (node.children.length) {
     const children = document.createElement("div");
     children.className = "node-children";
-    node.children.forEach(child => children.append(renderTreeNode(child)));
+    node.children.forEach((child, index) =>
+      children.append(renderTreeNode(child, false, `${nodeKey}/${index}:${child.id}`))
+    );
     wrapper.append(children);
   }
   return wrapper;
@@ -478,6 +551,7 @@ function renderPlan() {
   elements.summaryMaterials.textContent = formatNumber(resourceIds.length);
   elements.summaryOwned.textContent = formatNumber(sumValues(currentPlan.used));
   elements.summaryMissing.textContent = formatNumber(missing);
+  elements.summaryForge.textContent = formatDuration(currentPlan.totalForgeSeconds);
   renderInventory();
   renderMaterials(currentPlan);
   elements.tree.replaceChildren(renderTreeNode(currentPlan.tree, true));
@@ -637,6 +711,22 @@ async function initialize() {
     items = data.items || [];
     itemById = new Map(items.map(item => [item.id, item]));
     visualsById = new Map(Object.entries(data.visuals || {}));
+    let forgeDataAvailable = false;
+    try {
+      const forgeResponse = await fetch("./forge-times.json");
+      if (!forgeResponse.ok) throw new Error(`HTTP ${forgeResponse.status}`);
+      const forgeData = await forgeResponse.json();
+      const durations = forgeData.durations;
+      if (!durations || typeof durations !== "object" || Array.isArray(durations)) {
+        throw new Error("Format forge-times.json invalide.");
+      }
+      forgeTimesById = new Map(Object.entries(durations).filter(([, duration]) =>
+        Number.isFinite(duration) && duration > 0
+      ));
+      forgeDataAvailable = true;
+    } catch (error) {
+      console.error("Chargement des durées de forge impossible.", error);
+    }
     const ingredientIds = new Set(items.flatMap(item =>
       item.recipes.flatMap(recipe => recipe.ingredients.map(ingredient => ingredient.id))
     ));
@@ -653,7 +743,7 @@ async function initialize() {
     }
     elements.inventoryOptions.append(options);
     renderInventory();
-    elements.status.textContent = `${formatNumber(data.recipesTotal)} recettes · ${formatNumber(items.length)} objets`;
+    elements.status.textContent = `${formatNumber(data.recipesTotal)} recettes · ${formatNumber(items.length)} objets${forgeDataAvailable ? ` · ${forgeTimesById.size} durées forge` : " · durées forge indisponibles"}`;
   } catch (error) {
     elements.status.textContent = "Recettes indisponibles";
     elements.plannerMessage.textContent = "Impossible de charger les recettes. Ouvre l’application via un serveur local ou vérifie recipes.json.";

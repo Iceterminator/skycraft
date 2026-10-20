@@ -19,6 +19,8 @@ Puis ouvre <http://localhost:8000>.
 - Arbre de craft en vue horizontale avec branches repliables, zoom, défilement et mode plein écran.
 - Choix d’une recette alternative lorsqu’un objet a plusieurs recettes.
 - Saisie des stocks possédés, barres de progression et sauvegarde locale dans le navigateur.
+- Durée de forge affichée pour les objets concernés dans l’arbre et cumulée dans le résumé du plan. Le cumul suppose une forge séquentielle et n’intègre ni Quick Forge ni les emplacements utilisés en parallèle. Les données correspondantes sont sous licence MIT ; voir [LICENSE-FORGE-DATA.txt](./LICENSE-FORGE-DATA.txt).
+- Cases à cocher pour marquer les objets de l’arbre comme terminés ; leur état est sauvegardé localement et ne modifie pas les stocks.
 - Inventaire manuel accessible en haut de la page : son sélecteur ne propose que les ressources de base non craftables utilisées par les recettes. Les objets intermédiaires craftables restent pris en compte dans le calcul et l’import Hypixel.
 - Choix des icônes FurSky Reborn ou Hypixel SkyBlock, avec repli sur les textures disponibles si une icône manque. Les images FurSky sont chargées depuis le dépôt public [FurfSky Reborn](https://github.com/furfsky/reborn) ; les images du pack restent la propriété de leurs ayants droit.
 - Import facultatif des inventaires d’un profil via l’API Hypixel (clé API et UUID Minecraft).
@@ -28,5 +30,7 @@ L’API officielle Hypixel exige une clé : un pseudo seul ne permet pas de lire
 ## Données de recettes
 
 `recipes.json` contient 2 598 recettes de craft et 2 113 objets craftables, transformés à partir des données communautaires de [SkyblockRepo/Repo](https://github.com/SkyblockRepo/Repo) (instantané `dbc804448625824af9dfc5b7a2a1fb9eb372ec86`). Les noms, raretés et textures s’appuient également sur le catalogue public des objets Hypixel ; les icônes vanilla proviennent de [minecraft-assets](https://github.com/InventivetalentDev/minecraft-assets). Certaines images nécessitent une connexion Internet. Le jeu change fréquemment : les recettes évoluent avec les données amont et peuvent être incomplètes ou obsolètes. Le référentiel attribué est sous licence MIT ; voir [LICENSE-RECIPES.txt](./LICENSE-RECIPES.txt).
+
+`forge-times.json` fournit les durées de forge en secondes pour les objets du catalogue ayant une recette de forge dans les données [NotEnoughUpdates-REPO](https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO), instantané `20a302457375ddfd7005e192486ac86781729b0a`. Les temps du jeu peuvent varier avec les bonus de forge et les mises à jour.
 
 L’application n’est pas affiliée à Hypixel.

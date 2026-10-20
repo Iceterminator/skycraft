@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#10151c">
     <meta name="description" content="Planificateur de craft Hypixel SkyBlock : recettes, arbre de craft, stocks et progression.">
     <title>SkyCraft — calculateur de craft Hypixel SkyBlock</title>
-    <link rel="stylesheet" href="styles.css?v=tree-view-20261020">
-    <script src="app.js?v=tree-view-20261020" defer></script>
+    <link rel="stylesheet" href="styles.css?v=forge-tracking-20261020">
+    <script src="app.js?v=forge-tracking-20261020" defer></script>
   </head>
   <body>
     <header class="topbar">
@@ -87,6 +87,7 @@
           <article class="summary-card"><span class="summary-label">MATÉRIAUX À PRÉVOIR</span><strong id="summary-materials">0</strong><span class="summary-note">types de ressources</span></article>
           <article class="summary-card"><span class="summary-label">DÉJÀ DANS TON STOCK</span><strong id="summary-owned">0</strong><span class="summary-note">unités utilisées</span></article>
           <article class="summary-card"><span class="summary-label">ENCORE NÉCESSAIRE</span><strong id="summary-missing">0</strong><span class="summary-note">unités à trouver</span></article>
+          <article class="summary-card forge-summary-card"><span class="summary-label">TEMPS CUMULÉ DE FORGE</span><strong id="summary-forge">0 s</strong><span class="summary-note">hors Quick Forge et forge parallèle</span></article>
         </div>
 
         <div class="workspace-grid">
@@ -105,7 +106,7 @@
               <div><p class="section-index">04 / VISUALISATION</p><h2 id="tree-title">Arbre de craft</h2></div>
               <span class="tree-icon" aria-hidden="true">⌘</span>
             </div>
-            <p class="tree-hint">Lis l’arbre de gauche à droite, ouvre les branches pour suivre les ingrédients et fais défiler pour explorer.</p>
+            <p class="tree-hint">Lis l’arbre de gauche à droite, ouvre les branches et coche les objets terminés. Les durées sont cumulées sans bonus Quick Forge.</p>
             <div id="recipe-choice-wrap" class="recipe-choice-wrap" hidden>
               <label for="recipe-choice" class="field-label">RECETTE À UTILISER</label>
               <select id="recipe-choice"></select>
