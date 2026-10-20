@@ -327,7 +327,7 @@ h1 span { color: var(--green); }
 .tree-viewport { max-height: 680px; min-height: 150px; overflow: auto; overscroll-behavior: contain; border: 1px solid #28343e; border-radius: 9px; background-color: #10171e; background-image: radial-gradient(#34414b 0.75px, transparent 0.75px); background-size: 18px 18px; scrollbar-color: #46535f #151c23; scrollbar-width: thin; }
 .tree-viewport:focus-visible { outline: 2px solid #82ad52; outline-offset: 2px; }
 .craft-tree { display: block; width: max-content; min-width: 100%; margin: 0; padding: 22px; }
-.tree-node { display: grid; grid-template-columns: 225px max-content; align-items: center; min-width: 225px; margin: 0 !important; padding: 0 !important; border: 0 !important; }
+.tree-node { display: grid; grid-template-columns: 225px max-content; align-items: start; min-width: 225px; margin: 0 !important; padding: 0 !important; border: 0 !important; }
 .tree-node:not(.tree-root)::before { content: none !important; }
 .tree-branch > .tree-summary { position: relative; z-index: 1; display: block; grid-column: 1; width: 225px; padding: 0 12px 0 0; list-style: none; cursor: pointer; }
 .tree-branch > .tree-summary::-webkit-details-marker { display: none; }
@@ -348,7 +348,7 @@ h1 span { color: var(--green); }
 .node-tag { margin-left: 4px; }
 .node-progress { margin-top: 6px; }
 .node-progress .stock-progress-label { font-size: 7px; }
-.node-children { position: relative; display: flex; grid-column: 2; flex-direction: column; align-self: stretch; justify-content: center; gap: 12px; width: max-content; min-width: 250px; margin: 0 0 0 0; padding: 12px 0 12px 23px; border: 0; }
+.node-children { position: relative; display: flex; grid-column: 2; flex-direction: column; align-self: stretch; justify-content: flex-start; gap: 12px; width: max-content; min-width: 250px; margin: 0 0 0 0; padding: 12px 0 12px 23px; border: 0; }
 .node-children::before { position: absolute; top: 12px; bottom: 12px; left: 0; width: 0; border-left: 1px solid #526371; content: ""; }
 .node-children > .tree-node { position: relative; }
 .node-children > .tree-node::before { position: absolute; top: 50%; left: -23px; width: 23px; border-top: 1px solid #526371; content: ""; }
