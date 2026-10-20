@@ -160,7 +160,7 @@
             </div>
             <span class="heading-icon" aria-hidden="true">◈</span>
           </div>
-          <p class="panel-description">Choisis un objet du catalogue : SkyCraft compare son prix AH/Bazaar avec le coût de fabrication, puis recommande le rang et la source les moins chers pour chaque composant.</p>
+          <p class="panel-description">Choisis un objet du catalogue : SkyCraft compare les prix AH et Bazaar au coût de fabrication. Pour l’AH, utilise la recherche automatique avec une clé ou saisis les prix que tu as relevés.</p>
           <form id="market-form" class="market-form">
             <label class="search-field">
               <span class="field-label">OBJET À COMPARER</span>
@@ -171,13 +171,25 @@
               <span class="field-label">QUANTITÉ</span>
               <span class="input-wrap"><input id="market-quantity" type="number" min="1" max="999999" value="1" inputmode="numeric"></span>
             </label>
-            <label class="market-key-field">
+            <label class="market-mode-field">
+              <span class="field-label">PRIX DE L’AH</span>
+              <select id="market-price-mode">
+                <option value="api">Automatique · clé API</option>
+                <option value="manual">Saisie manuelle · sans clé</option>
+              </select>
+            </label>
+            <label id="market-key-field" class="market-key-field">
               <span class="field-label">CLÉ API HYPIXEL</span>
               <input id="market-api-key" type="password" placeholder="Colle ta clé API" autocomplete="off" required>
             </label>
             <button id="market-submit" class="primary-button" type="submit">Comparer les prix <span aria-hidden="true">→</span></button>
           </form>
-          <p class="market-key-note">La clé est utilisée uniquement dans ton navigateur et n’est pas sauvegardée. L’AH est parcouru pour trouver le BIN le moins cher ; l’API peut mettre un moment si le marché contient beaucoup d’annonces.</p>
+          <p id="market-mode-note" class="market-key-note">La clé est utilisée uniquement dans ton navigateur et n’est pas sauvegardée. L’AH est parcouru pour trouver le BIN le moins cher ; l’API peut mettre un moment si le marché contient beaucoup d’annonces.</p>
+          <section id="market-manual-prices" class="market-manual-prices" hidden aria-label="Prix AH saisis manuellement">
+            <h3>Prix AH manuels · coins par unité</h3>
+            <p>Saisis les prix des objets que tu vois à l’AH. Laisse vide ceux que tu ne connais pas ; ils ne seront pas proposés à l’achat. Tes prix sont sauvegardés sur cet appareil.</p>
+            <div id="market-manual-price-list" class="market-manual-price-list"></div>
+          </section>
           <p id="market-message" class="inline-message" role="status" aria-live="polite"></p>
         </section>
         <section id="market-results" class="market-results" hidden aria-live="polite">

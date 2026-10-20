@@ -3,6 +3,8 @@ const VISUAL_PACK_KEY = "skycraft.visual-pack.v1";
 const COMPLETED_CRAFTS_KEY = "skycraft.completed-crafts.v1";
 const FORGE_SLOTS_KEY = "skycraft.forge-slots.v1";
 const RESOURCE_RANK_KEY = "skycraft.resource-rank.v1";
+const MANUAL_MARKET_PRICES_KEY = "skycraft.manual-market-prices.v1";
+const MARKET_PRICE_MODE_KEY = "skycraft.market-price-mode.v1";
 const NBT_INVENTORY_FIELDS = new Set([
   "inv_contents", "ender_chest_contents", "talisman_bag", "wardrobe_contents",
   "bag_contents", "fishing_bag", "potion_bag", "personal_vault_contents",
@@ -64,10 +66,16 @@ const elements = {
   marketSearch: document.querySelector("#market-item-search"),
   marketOptions: document.querySelector("#market-item-options"),
   marketQuantity: document.querySelector("#market-quantity"),
+  marketPriceMode: document.querySelector("#market-price-mode"),
+  marketKeyField: document.querySelector("#market-key-field"),
   marketApiKey: document.querySelector("#market-api-key"),
+  marketModeNote: document.querySelector("#market-mode-note"),
+  marketManualPrices: document.querySelector("#market-manual-prices"),
+  marketManualPriceList: document.querySelector("#market-manual-price-list"),
   marketSubmit: document.querySelector("#market-submit"),
   marketMessage: document.querySelector("#market-message"),
   marketResults: document.querySelector("#market-results"),
+  marketResultNote: document.querySelector(".market-result-note"),
   marketTitle: document.querySelector("#market-result-title"),
   marketBadge: document.querySelector("#market-result-badge"),
   marketSummary: document.querySelector("#market-summary"),
@@ -93,6 +101,7 @@ let treeZoom = 1;
 let marketItems = [];
 let marketItemById = new Map();
 let marketCache = null;
+let manualMarketPrices = readManualMarketPrices();
 let marketRequestId = 0;
 const recipeChoices = {};
 
@@ -102,6 +111,37 @@ function readVisualPack() {
   } catch (error) {
     console.warn("Impossible de lire le pack visuel sauvegardé.", error);
     return "fursky";
+  }
+}
+
+function readManualMarketPrices() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MANUAL_MARKET_PRICES_KEY) || "{}");
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return {};
+    return Object.fromEntries(Object.entries(saved).filter(([, price]) =>
+      Number.isFinite(price) && price > 0
+    ));
+  } catch (error) {
+    console.warn("Impossible de lire les prix AH manuels sauvegardés.", error);
+    return {};
+  }
+}
+
+function readMarketPriceMode() {
+  try {
+    return localStorage.getItem(MARKET_PRICE_MODE_KEY) === "manual" ? "manual" : "api";
+  } catch (error) {
+    console.warn("Impossible de lire le mode de prix sauvegardé.", error);
+    return "api";
+  }
+}
+
+function saveManualMarketPrices() {
+  try {
+    localStorage.setItem(MANUAL_MARKET_PRICES_KEY, JSON.stringify(manualMarketPrices));
+  } catch (error) {
+    console.error("Impossible de sauvegarder les prix AH manuels.", error);
+    elements.marketMessage.textContent = "Impossible de sauvegarder les prix AH sur cet appareil.";
   }
 }
 
@@ -1065,6 +1105,44 @@ function collectMarketItemIds(itemId, result = new Set()) {
   return result;
 }
 
+function renderManualMarketPrices(itemId) {
+  elements.marketManualPriceList.replaceChildren();
+  if (!itemId) {
+    elements.marketManualPrices.hidden = true;
+    return;
+  }
+
+  rankById.clear();
+  const wantedIds = [...collectMarketItemIds(itemId)].sort((first, second) =>
+    getItemRank(first) - getItemRank(second) || getItemName(first).localeCompare(getItemName(second), "fr")
+  );
+  const rows = document.createDocumentFragment();
+  for (const id of wantedIds) {
+    const row = document.createElement("label");
+    row.className = "market-manual-price-row";
+    const icon = createItemIcon(id, "item-icon-tiny");
+    const name = document.createElement("span");
+    name.className = "market-manual-price-name";
+    name.textContent = getItemName(id);
+    const rank = document.createElement("span");
+    rank.className = "market-manual-price-rank";
+    rank.textContent = `R${getItemRank(id)}`;
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.step = "any";
+    input.inputMode = "decimal";
+    input.placeholder = "Prix";
+    input.value = manualMarketPrices[id] ?? "";
+    input.dataset.marketPriceId = id;
+    input.setAttribute("aria-label", `Prix AH unitaire de ${getItemName(id)} en coins`);
+    row.append(icon, name, rank, input);
+    rows.append(row);
+  }
+  elements.marketManualPriceList.append(rows);
+  elements.marketManualPrices.hidden = false;
+}
+
 function normalizeMarketName(value) {
   return normalizeSearch(value).replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -1118,7 +1196,16 @@ async function addAuctionPrices(auctions, wantedIds, namesToIds, prices) {
   }
 }
 
-async function fetchMarketPrices(wantedIds, apiKey, progress) {
+async function fetchMarketPrices(wantedIds, apiKey, progress, priceMode) {
+  if (priceMode === "manual") {
+    const bazaarPrices = await fetchBazaarPrices();
+    const auctionPrices = new Map([...wantedIds]
+      .filter(id => Number.isFinite(manualMarketPrices[id]) && manualMarketPrices[id] > 0)
+      .map(id => [id, manualMarketPrices[id]]));
+    progress("Prix Bazaar chargés ; utilisation des prix AH saisis…");
+    return { bazaarPrices, auctionPrices, scannedIds: new Set(wantedIds), auctionSource: "AH · prix saisi" };
+  }
+
   const cacheIsFresh = marketCache && Date.now() - marketCache.updatedAt < 60_000;
   const cacheCoversItems = cacheIsFresh && [...wantedIds].every(id => marketCache.scannedIds.has(id));
   if (cacheCoversItems) {
@@ -1163,7 +1250,8 @@ async function fetchMarketPrices(wantedIds, apiKey, progress) {
     updatedAt: Date.now(),
     bazaarPrices,
     auctionPrices,
-    scannedIds: new Set(wantedIds)
+    scannedIds: new Set(wantedIds),
+    auctionSource: "AH · meilleur BIN"
   };
   return marketCache;
 }
@@ -1173,7 +1261,9 @@ function getDirectMarketOptions(itemId, market) {
   const bazaarPrice = market.bazaarPrices.get(itemId);
   const auctionPrice = market.auctionPrices.get(itemId);
   if (Number.isFinite(bazaarPrice) && bazaarPrice > 0) options.push({ source: "Bazaar", unitPrice: bazaarPrice });
-  if (Number.isFinite(auctionPrice) && auctionPrice > 0) options.push({ source: "AH · meilleur BIN", unitPrice: auctionPrice });
+  if (Number.isFinite(auctionPrice) && auctionPrice > 0) {
+    options.push({ source: market.auctionSource || "AH · meilleur BIN", unitPrice: auctionPrice });
+  }
   return options.sort((first, second) => first.unitPrice - second.unitPrice);
 }
 
@@ -1293,9 +1383,9 @@ function renderMarketResults(item, quantity, plan, market) {
   const directBazaar = market.bazaarPrices.get(item.id);
   elements.marketSummary.replaceChildren(
     createMarketSummaryCard(
-      "ACHAT DIRECT · AH",
-      Number.isFinite(directAh) ? formatCoins(directAh * quantity) : "Aucun BIN coté",
-      Number.isFinite(directAh) ? `${formatCoins(directAh)} / unité` : "Annonce BIN introuvable"
+      `ACHAT DIRECT · ${market.auctionSource || "AH"}`,
+      Number.isFinite(directAh) ? formatCoins(directAh * quantity) : market.auctionSource === "AH · prix saisi" ? "Prix non saisi" : "Aucun BIN coté",
+      Number.isFinite(directAh) ? `${formatCoins(directAh)} / unité` : market.auctionSource === "AH · prix saisi" ? "Prix non saisi pour cet objet" : "Annonce BIN introuvable"
     ),
     createMarketSummaryCard(
       "ACHAT DIRECT · BAZAAR",
@@ -1309,6 +1399,9 @@ function renderMarketResults(item, quantity, plan, market) {
       true
     )
   );
+  elements.marketResultNote.textContent = market.auctionSource === "AH · prix saisi"
+    ? "Prix AH saisis manuellement et prix d’achat immédiat au Bazaar. Les prix vides ne sont pas considérés comme des offres ; taxes et frais éventuels non inclus."
+    : "Prix d’achat immédiat au Bazaar et meilleur BIN détecté dans les annonces actives au moment de la recherche, hors taxes et frais éventuels. Les recettes sont évaluées en choisissant le coût estimé le plus bas pour chaque rang.";
   elements.marketPlan.replaceChildren(renderMarketNode(plan));
   elements.marketResults.hidden = false;
 }
@@ -1319,8 +1412,9 @@ async function compareMarketPrices() {
     elements.marketMessage.textContent = "Choisis un objet reconnu dans la liste des suggestions.";
     return;
   }
+  const priceMode = elements.marketPriceMode.value;
   const apiKey = elements.marketApiKey.value.trim() || elements.apiKey.value.trim();
-  if (!apiKey) {
+  if (priceMode === "api" && !apiKey) {
     elements.marketMessage.textContent = "Saisis ta clé API Hypixel pour consulter l’AH.";
     return;
   }
@@ -1334,7 +1428,7 @@ async function compareMarketPrices() {
     const wantedIds = collectMarketItemIds(item.id);
     const market = await fetchMarketPrices(wantedIds, apiKey, message => {
       if (requestId === marketRequestId) elements.marketMessage.textContent = message;
-    });
+    }, priceMode);
     if (requestId !== marketRequestId) return;
     const counter = { count: 0, exceeded: false };
     rankById.clear();
@@ -1342,7 +1436,9 @@ async function compareMarketPrices() {
     if (counter.exceeded) throw new Error("Le calcul du chemin de fabrication a dépassé la limite de sécurité.");
     if (!plan) throw new Error("Le calcul du chemin de fabrication a dépassé la limite de sécurité.");
     renderMarketResults(item, quantity, plan, market);
-    elements.marketMessage.textContent = "Comparaison terminée. Les prix affichés correspondent aux dernières données obtenues.";
+    elements.marketMessage.textContent = priceMode === "manual"
+      ? "Comparaison terminée avec tes prix AH saisis et les prix Bazaar actuels."
+      : "Comparaison terminée. Les prix affichés correspondent aux dernières données obtenues.";
   } catch (error) {
     if (requestId === marketRequestId) {
       elements.marketMessage.textContent = `Comparaison impossible : ${error.message}`;
@@ -1356,6 +1452,7 @@ async function compareMarketPrices() {
 async function initialize() {
   elements.visualPack.value = visualPack;
   elements.forgeSlots.value = String(forgeSlots);
+  elements.marketPriceMode.value = readMarketPriceMode();
   try {
     const response = await fetch("./recipes.json");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -1364,6 +1461,7 @@ async function initialize() {
     itemById = new Map(items.map(item => [item.id, item]));
     visualsById = new Map(Object.entries(data.visuals || {}));
     populateMarketItems();
+    updateMarketPriceMode();
     let forgeDataAvailable = false;
     try {
       const forgeResponse = await fetch("./forge-times.json");
@@ -1631,6 +1729,44 @@ elements.marketApiKey.addEventListener("input", () => {
 });
 elements.apiKey.addEventListener("input", () => {
   elements.marketApiKey.value = elements.apiKey.value;
+});
+function updateMarketPriceMode() {
+  const manualMode = elements.marketPriceMode.value === "manual";
+  elements.marketKeyField.hidden = manualMode;
+  elements.marketApiKey.required = !manualMode;
+  elements.marketManualPrices.hidden = !manualMode;
+  try {
+    localStorage.setItem(MARKET_PRICE_MODE_KEY, manualMode ? "manual" : "api");
+  } catch (error) {
+    console.warn("Impossible de sauvegarder le mode de prix.", error);
+  }
+  elements.marketModeNote.textContent = manualMode
+    ? "Aucune clé API nécessaire pour l’AH : renseigne les prix par unité ci-dessous. Le prix du Bazaar est récupéré automatiquement."
+    : "La clé est utilisée uniquement dans ton navigateur et n’est pas sauvegardée. L’AH est parcouru pour trouver le BIN le moins cher ; l’API peut mettre un moment si le marché contient beaucoup d’annonces.";
+  if (manualMode) renderManualMarketPrices(findMatchingMarketItem(elements.marketSearch.value)?.id);
+}
+elements.marketPriceMode.addEventListener("change", updateMarketPriceMode);
+elements.marketSearch.addEventListener("input", () => {
+  if (elements.marketPriceMode.value === "manual") {
+    renderManualMarketPrices(findMatchingMarketItem(elements.marketSearch.value)?.id);
+  }
+});
+elements.marketSearch.addEventListener("change", () => {
+  if (elements.marketPriceMode.value === "manual") {
+    renderManualMarketPrices(findMatchingMarketItem(elements.marketSearch.value)?.id);
+  }
+});
+elements.marketManualPriceList.addEventListener("input", event => {
+  const input = event.target.closest("input[data-market-price-id]");
+  if (!input) return;
+  const id = input.dataset.marketPriceId;
+  const price = input.value === "" ? NaN : Number(input.value);
+  if (Number.isFinite(price) && price > 0) {
+    manualMarketPrices[id] = price;
+  } else {
+    delete manualMarketPrices[id];
+  }
+  saveManualMarketPrices();
 });
 elements.marketForm.addEventListener("submit", event => {
   event.preventDefault();
