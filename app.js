@@ -22,6 +22,15 @@ const elements = {
   inventoryCount: document.querySelector("#inventory-count"),
   materials: document.querySelector("#materials-list"),
   tree: document.querySelector("#craft-tree"),
+  treePanel: document.querySelector(".tree-panel"),
+  treeViewport: document.querySelector("#tree-viewport"),
+  treeExpand: document.querySelector("#tree-expand"),
+  treeZoomOut: document.querySelector("#tree-zoom-out"),
+  treeZoomIn: document.querySelector("#tree-zoom-in"),
+  treeZoomReset: document.querySelector("#tree-zoom-reset"),
+  treeZoomValue: document.querySelector("#tree-zoom-value"),
+  treeFullscreen: document.querySelector("#tree-fullscreen"),
+  treeMessage: document.querySelector("#tree-message"),
   recipeChoiceWrap: document.querySelector("#recipe-choice-wrap"),
   recipeChoice: document.querySelector("#recipe-choice"),
   clearInventory: document.querySelector("#clear-inventory"),
@@ -52,6 +61,7 @@ let visualPack = readVisualPack();
 let selectedItem = null;
 let currentPlan = null;
 let loadedProfiles = [];
+let treeZoom = 1;
 const recipeChoices = {};
 
 function readVisualPack() {
@@ -471,6 +481,8 @@ function renderPlan() {
   renderInventory();
   renderMaterials(currentPlan);
   elements.tree.replaceChildren(renderTreeNode(currentPlan.tree, true));
+  elements.treeExpand.dataset.expanded = "false";
+  elements.treeExpand.textContent = "Tout déplier";
 }
 
 function readNbt(input) {
@@ -720,6 +732,64 @@ elements.recipeChoice.addEventListener("change", () => {
   recipeChoices[selectedItem.id] = Number(elements.recipeChoice.value);
   renderPlan();
 });
+function setTreeZoom(value) {
+  treeZoom = Math.min(1.5, Math.max(0.6, Math.round(value * 10) / 10));
+  elements.tree.style.zoom = String(treeZoom);
+  elements.treeZoomValue.textContent = `${Math.round(treeZoom * 100)} %`;
+  elements.treeZoomOut.disabled = treeZoom <= 0.6;
+  elements.treeZoomIn.disabled = treeZoom >= 1.5;
+}
+
+function expandTree(expand) {
+  const branches = [...elements.tree.querySelectorAll("details.tree-branch")];
+  branches.forEach((branch, index) => { branch.open = expand || index === 0; });
+  elements.treeExpand.dataset.expanded = String(expand);
+  elements.treeExpand.textContent = expand ? "Tout replier" : "Tout déplier";
+}
+
+function fitTreeToWidth() {
+  setTreeZoom(1);
+  const availableWidth = elements.treeViewport.clientWidth - 48;
+  const contentWidth = elements.tree.scrollWidth;
+  if (availableWidth > 0 && contentWidth > 0) {
+    setTreeZoom(Math.min(1, availableWidth / contentWidth));
+  }
+}
+
+elements.treeZoomOut.addEventListener("click", () => setTreeZoom(treeZoom - 0.1));
+elements.treeZoomIn.addEventListener("click", () => setTreeZoom(treeZoom + 0.1));
+elements.treeZoomReset.addEventListener("click", fitTreeToWidth);
+elements.treeExpand.addEventListener("click", () =>
+  expandTree(elements.treeExpand.dataset.expanded !== "true")
+);
+elements.treeFullscreen.addEventListener("click", async () => {
+  elements.treeMessage.textContent = "";
+  try {
+    if (document.fullscreenElement === elements.treePanel) {
+      await document.exitFullscreen();
+      updateTreeFullscreenControl();
+    } else if (elements.treePanel.requestFullscreen) {
+      expandTree(true);
+      await elements.treePanel.requestFullscreen();
+      updateTreeFullscreenControl();
+      window.setTimeout(fitTreeToWidth, 100);
+    } else {
+      elements.treeMessage.textContent = "Le plein écran n’est pas pris en charge par ce navigateur.";
+    }
+  } catch (error) {
+    elements.treeMessage.textContent = "Impossible d’ouvrir l’arbre en plein écran. Vérifie les permissions du navigateur.";
+    console.error("Passage de l’arbre en plein écran impossible.", error);
+  }
+});
+function updateTreeFullscreenControl() {
+  const isFullscreen = document.fullscreenElement === elements.treePanel;
+  elements.treeFullscreen.setAttribute("aria-pressed", String(isFullscreen));
+  elements.treeFullscreen.innerHTML = isFullscreen
+    ? 'Quitter le plein écran <span aria-hidden="true">⤡</span>'
+    : 'Plein écran <span aria-hidden="true">⤢</span>';
+  if (isFullscreen) elements.treeViewport.focus();
+}
+document.addEventListener("fullscreenchange", updateTreeFullscreenControl);
 elements.clearInventory.addEventListener("click", () => {
   inventory = {};
   saveInventory();

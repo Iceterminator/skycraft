@@ -16,6 +16,7 @@ Puis ouvre <http://localhost:8000>.
 
 - Recherche parmi les objets craftables et leurs recettes.
 - Calcul des besoins pour une quantité donnée, avec arbre de craft récursif.
+- Arbre de craft en vue horizontale avec branches repliables, zoom, défilement et mode plein écran.
 - Choix d’une recette alternative lorsqu’un objet a plusieurs recettes.
 - Saisie des stocks possédés, barres de progression et sauvegarde locale dans le navigateur.
 - Inventaire manuel accessible en haut de la page : son sélecteur ne propose que les ressources de base non craftables utilisées par les recettes. Les objets intermédiaires craftables restent pris en compte dans le calcul et l’import Hypixel.

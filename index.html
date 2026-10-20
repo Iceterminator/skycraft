@@ -101,16 +101,29 @@
           </section>
 
           <section class="panel tree-panel" aria-labelledby="tree-title">
-            <div class="panel-heading compact-heading">
+            <div class="panel-heading compact-heading tree-panel-header">
               <div><p class="section-index">04 / VISUALISATION</p><h2 id="tree-title">Arbre de craft</h2></div>
               <span class="tree-icon" aria-hidden="true">⌘</span>
             </div>
-            <p class="tree-hint">Ouvre une branche pour voir ses ingrédients. Les quantités indiquent le besoin à chaque étape.</p>
+            <p class="tree-hint">Lis l’arbre de gauche à droite, ouvre les branches pour suivre les ingrédients et fais défiler pour explorer.</p>
             <div id="recipe-choice-wrap" class="recipe-choice-wrap" hidden>
               <label for="recipe-choice" class="field-label">RECETTE À UTILISER</label>
               <select id="recipe-choice"></select>
             </div>
-            <div id="craft-tree" class="craft-tree"></div>
+            <div class="tree-toolbar" aria-label="Commandes de l’arbre">
+              <button id="tree-expand" class="tree-control-button" type="button">Tout déplier</button>
+              <div class="tree-zoom-controls" aria-label="Zoom de l’arbre">
+                <button id="tree-zoom-out" class="tree-control-button zoom-button" type="button" aria-label="Réduire le zoom">−</button>
+                <span id="tree-zoom-value" class="tree-zoom-value">100 %</span>
+                <button id="tree-zoom-in" class="tree-control-button zoom-button" type="button" aria-label="Augmenter le zoom">+</button>
+                <button id="tree-zoom-reset" class="tree-control-button" type="button">Ajuster</button>
+              </div>
+              <button id="tree-fullscreen" class="tree-control-button fullscreen-button" type="button" aria-pressed="false">Plein écran <span aria-hidden="true">⤢</span></button>
+            </div>
+            <p id="tree-message" class="tree-message" role="status" aria-live="polite"></p>
+            <div id="tree-viewport" class="tree-viewport" tabindex="0" aria-label="Arbre de craft défilable">
+              <div id="craft-tree" class="craft-tree"></div>
+            </div>
             <div class="tree-legend"><span><i class="legend-dot owned"></i> Possédé</span><span><i class="legend-dot missing"></i> À trouver</span><span><i class="legend-dot craft"></i> À fabriquer</span></div>
           </section>
         </div>
