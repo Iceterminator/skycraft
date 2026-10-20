@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#10151c">
     <meta name="description" content="Planificateur de craft Hypixel SkyBlock : recettes, arbre de craft, stocks et progression.">
     <title>SkyCraft — calculateur de craft Hypixel SkyBlock</title>
-    <link rel="stylesheet" href="styles.css?v=resource-ranks-20261020">
-    <script src="app.js?v=resource-ranks-20261020" defer></script>
+    <link rel="stylesheet" href="styles.css?v=market-comparison-20261020">
+    <script src="app.js?v=market-comparison-20261020" defer></script>
   </head>
   <body>
     <header class="topbar">
@@ -26,6 +26,12 @@
         <p class="intro-copy">Tes stocks en premier, ton plan juste en dessous. Trouve les ressources à réunir sans te perdre dans l’arbre.</p>
       </section>
 
+      <nav class="mode-tabs" role="tablist" aria-label="Modes SkyCraft">
+        <button id="tab-planner" class="mode-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="calculator-mode" data-mode="calculator">Calculateur de craft</button>
+        <button id="tab-market" class="mode-tab" type="button" role="tab" aria-selected="false" aria-controls="market-mode" data-mode="market" tabindex="-1">Comparer les prix AH</button>
+      </nav>
+
+      <div id="calculator-mode" role="tabpanel" aria-labelledby="tab-planner">
       <div class="top-tools-grid">
       <section id="inventaire" class="panel inventory-overview" aria-labelledby="inventory-overview-title">
         <div class="panel-heading compact-heading inventory-overview-heading">
@@ -142,6 +148,47 @@
             <div class="tree-legend"><span><i class="legend-dot owned"></i> Possédé</span><span><i class="legend-dot missing"></i> À trouver</span><span><i class="legend-dot craft"></i> À fabriquer</span></div>
           </section>
         </div>
+      </section>
+      </div>
+
+      <section id="market-mode" class="market-mode" role="tabpanel" aria-labelledby="tab-market" hidden>
+        <section class="panel market-panel" aria-labelledby="market-title">
+          <div class="panel-heading">
+            <div>
+              <p class="section-index">MARCHÉ HYPIXEL</p>
+              <h2 id="market-title">Acheter ou fabriquer ?</h2>
+            </div>
+            <span class="heading-icon" aria-hidden="true">◈</span>
+          </div>
+          <p class="panel-description">Choisis un objet du catalogue : SkyCraft compare son prix AH/Bazaar avec le coût de fabrication, puis recommande le rang et la source les moins chers pour chaque composant.</p>
+          <form id="market-form" class="market-form">
+            <label class="search-field">
+              <span class="field-label">OBJET À COMPARER</span>
+              <span class="input-wrap"><span class="search-icon" aria-hidden="true">⌕</span><input id="market-item-search" type="search" placeholder="Ex. Enchanted Redstone Block" autocomplete="off" list="market-item-options" required></span>
+              <datalist id="market-item-options"></datalist>
+            </label>
+            <label class="quantity-field">
+              <span class="field-label">QUANTITÉ</span>
+              <span class="input-wrap"><input id="market-quantity" type="number" min="1" max="999999" value="1" inputmode="numeric"></span>
+            </label>
+            <label class="market-key-field">
+              <span class="field-label">CLÉ API HYPIXEL</span>
+              <input id="market-api-key" type="password" placeholder="Colle ta clé API" autocomplete="off" required>
+            </label>
+            <button id="market-submit" class="primary-button" type="submit">Comparer les prix <span aria-hidden="true">→</span></button>
+          </form>
+          <p class="market-key-note">La clé est utilisée uniquement dans ton navigateur et n’est pas sauvegardée. L’AH est parcouru pour trouver le BIN le moins cher ; l’API peut mettre un moment si le marché contient beaucoup d’annonces.</p>
+          <p id="market-message" class="inline-message" role="status" aria-live="polite"></p>
+        </section>
+        <section id="market-results" class="market-results" hidden aria-live="polite">
+          <div class="results-heading">
+            <div><p class="section-index">MEILLEURE STRATÉGIE ESTIMÉE</p><h2 id="market-result-title"></h2></div>
+            <span id="market-result-badge" class="target-badge"></span>
+          </div>
+          <div id="market-summary" class="market-summary"></div>
+          <p class="market-result-note">Prix d’achat immédiat au Bazaar et meilleur BIN détecté dans les annonces actives au moment de la recherche, hors taxes et frais éventuels. Les recettes sont évaluées en choisissant le coût estimé le plus bas pour chaque rang.</p>
+          <div id="market-plan" class="market-plan"></div>
+        </section>
       </section>
 
       <section class="panel api-panel" aria-labelledby="api-title">

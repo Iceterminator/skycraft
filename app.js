@@ -56,7 +56,22 @@ const elements = {
   profilePickerWrap: document.querySelector("#profile-picker-wrap"),
   profilePicker: document.querySelector("#profile-picker"),
   importProfile: document.querySelector("#import-profile"),
-  loadProfiles: document.querySelector("#load-profiles")
+  loadProfiles: document.querySelector("#load-profiles"),
+  modeTabs: [...document.querySelectorAll(".mode-tab")],
+  calculatorMode: document.querySelector("#calculator-mode"),
+  marketMode: document.querySelector("#market-mode"),
+  marketForm: document.querySelector("#market-form"),
+  marketSearch: document.querySelector("#market-item-search"),
+  marketOptions: document.querySelector("#market-item-options"),
+  marketQuantity: document.querySelector("#market-quantity"),
+  marketApiKey: document.querySelector("#market-api-key"),
+  marketSubmit: document.querySelector("#market-submit"),
+  marketMessage: document.querySelector("#market-message"),
+  marketResults: document.querySelector("#market-results"),
+  marketTitle: document.querySelector("#market-result-title"),
+  marketBadge: document.querySelector("#market-result-badge"),
+  marketSummary: document.querySelector("#market-summary"),
+  marketPlan: document.querySelector("#market-plan")
 };
 
 let items = [];
@@ -75,6 +90,10 @@ let selectedItem = null;
 let currentPlan = null;
 let loadedProfiles = [];
 let treeZoom = 1;
+let marketItems = [];
+let marketItemById = new Map();
+let marketCache = null;
+let marketRequestId = 0;
 const recipeChoices = {};
 
 function readVisualPack() {
@@ -1007,6 +1026,333 @@ async function fetchProfiles(apiKey, uuid) {
   return profiles;
 }
 
+function populateMarketItems() {
+  marketItemById = new Map(items.map(item => [item.id, item]));
+  for (const [id, visual] of visualsById) {
+    if (!marketItemById.has(id)) {
+      marketItemById.set(id, { ...visual, id, name: visual.name || getItemName(id), recipes: [] });
+    }
+  }
+  marketItems = [...marketItemById.values()].sort((first, second) =>
+    first.name.localeCompare(second.name, "fr")
+  );
+  elements.marketOptions.replaceChildren();
+  const options = document.createDocumentFragment();
+  for (const item of marketItems) {
+    const option = document.createElement("option");
+    option.value = item.name;
+    option.label = item.id;
+    options.append(option);
+  }
+  elements.marketOptions.append(options);
+}
+
+function findMatchingMarketItem(query) {
+  const normalized = normalizeSearch(query);
+  if (!normalized) return null;
+  return marketItems.find(item => item.id.toLowerCase() === query.trim().toUpperCase())
+    || marketItems.find(item => normalizeSearch(item.name) === normalized)
+    || null;
+}
+
+function collectMarketItemIds(itemId, result = new Set()) {
+  if (result.has(itemId)) return result;
+  result.add(itemId);
+  const item = itemById.get(itemId);
+  for (const recipe of item?.recipes || []) {
+    for (const ingredient of recipe.ingredients) collectMarketItemIds(ingredient.id, result);
+  }
+  return result;
+}
+
+function normalizeMarketName(value) {
+  return normalizeSearch(value).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+async function fetchHypixelJson(path, apiKey) {
+  const url = new URL(`https://api.hypixel.net/v2/skyblock/${path}`);
+  url.searchParams.set("key", apiKey);
+  const response = await fetch(url);
+  const body = await response.json();
+  if (!response.ok || !body.success) {
+    throw new Error(body.cause || `Erreur HTTP ${response.status}`);
+  }
+  return body;
+}
+
+async function fetchBazaarPrices() {
+  const response = await fetch("https://api.hypixel.net/v2/skyblock/bazaar");
+  const body = await response.json();
+  if (!response.ok || !body.success) {
+    throw new Error(body.cause || `Erreur HTTP ${response.status} sur le Bazaar`);
+  }
+  const prices = new Map();
+  for (const [id, product] of Object.entries(body.products || {})) {
+    const price = Number(product.quick_status?.buyPrice);
+    if (Number.isFinite(price) && price > 0) prices.set(id, price);
+  }
+  return prices;
+}
+
+async function fetchAuctionPage(pageNumber, apiKey) {
+  return fetchHypixelJson(`auctions?page=${pageNumber}`, apiKey);
+}
+
+async function addAuctionPrices(auctions, wantedIds, namesToIds, prices) {
+  for (const auction of auctions) {
+    if (!auction.bin || !Number.isFinite(auction.starting_bid) || auction.starting_bid <= 0) continue;
+    const nameIds = namesToIds.get(normalizeMarketName(auction.item_name));
+    if (!nameIds?.size || typeof auction.item_bytes !== "string" || !auction.item_bytes) continue;
+    try {
+      const contents = await decodeInventoryData(auction.item_bytes);
+      const itemsFound = {};
+      accumulateNbtItems(contents, itemsFound);
+      for (const [id, count] of Object.entries(itemsFound)) {
+        if (!nameIds.has(id) || count <= 0) continue;
+        const unitPrice = auction.starting_bid / count;
+        if (unitPrice > 0 && (!prices.has(id) || unitPrice < prices.get(id))) prices.set(id, unitPrice);
+      }
+    } catch (error) {
+      console.warn("Impossible de lire une annonce AH candidate.", error);
+    }
+  }
+}
+
+async function fetchMarketPrices(wantedIds, apiKey, progress) {
+  const cacheIsFresh = marketCache && Date.now() - marketCache.updatedAt < 60_000;
+  const cacheCoversItems = cacheIsFresh && [...wantedIds].every(id => marketCache.scannedIds.has(id));
+  if (cacheCoversItems) {
+    progress("Prix en cache de moins d’une minute…");
+    return marketCache;
+  }
+
+  const namesToIds = new Map();
+  for (const id of wantedIds) {
+    const name = normalizeMarketName(getItemName(id));
+    if (!namesToIds.has(name)) namesToIds.set(name, new Set());
+    namesToIds.get(name).add(id);
+  }
+
+  const [bazaarPrices, firstPage] = await Promise.all([
+    fetchBazaarPrices(),
+    fetchAuctionPage(0, apiKey)
+  ]);
+  if (!Number.isInteger(firstPage.totalPages) || firstPage.totalPages < 1) {
+    throw new Error("L’API Hypixel n’a pas fourni le nombre de pages AH attendu.");
+  }
+
+  const auctionPrices = new Map();
+  await addAuctionPrices(firstPage.auctions || [], wantedIds, namesToIds, auctionPrices);
+  let completedPages = 1;
+  const totalPages = firstPage.totalPages;
+  progress(`Analyse de l’AH : page 1/${formatNumber(totalPages)}…`);
+  let nextPage = 1;
+  const workerCount = Math.min(4, Math.max(0, totalPages - 1));
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextPage < totalPages) {
+      const pageNumber = nextPage;
+      nextPage += 1;
+      const page = await fetchAuctionPage(pageNumber, apiKey);
+      await addAuctionPrices(page.auctions || [], wantedIds, namesToIds, auctionPrices);
+      completedPages += 1;
+      progress(`Analyse de l’AH : page ${formatNumber(completedPages)}/${formatNumber(totalPages)}…`);
+    }
+  }));
+
+  marketCache = {
+    updatedAt: Date.now(),
+    bazaarPrices,
+    auctionPrices,
+    scannedIds: new Set(wantedIds)
+  };
+  return marketCache;
+}
+
+function getDirectMarketOptions(itemId, market) {
+  const options = [];
+  const bazaarPrice = market.bazaarPrices.get(itemId);
+  const auctionPrice = market.auctionPrices.get(itemId);
+  if (Number.isFinite(bazaarPrice) && bazaarPrice > 0) options.push({ source: "Bazaar", unitPrice: bazaarPrice });
+  if (Number.isFinite(auctionPrice) && auctionPrice > 0) options.push({ source: "AH · meilleur BIN", unitPrice: auctionPrice });
+  return options.sort((first, second) => first.unitPrice - second.unitPrice);
+}
+
+function buildMarketPlan(itemId, quantity, market, path = [], counter = { count: 0 }) {
+  counter.count += 1;
+  if (counter.count > 2500) {
+    counter.exceeded = true;
+    return null;
+  }
+  if (path.includes(itemId)) return null;
+  const item = marketItemById.get(itemId);
+  if (!item) return null;
+  const directOptions = getDirectMarketOptions(itemId, market);
+  const bestDirect = directOptions[0];
+  let best = bestDirect
+    ? { mode: "buy", source: bestDirect.source, total: bestDirect.unitPrice * quantity, directOptions, children: [] }
+    : null;
+  const nextPath = [...path, itemId];
+
+  for (const recipe of item.recipes || []) {
+    if (!recipe.output || recipe.output <= 0) continue;
+    const batches = Math.ceil(quantity / recipe.output);
+    const ingredientTotals = new Map();
+    for (const ingredient of recipe.ingredients) {
+      ingredientTotals.set(ingredient.id, (ingredientTotals.get(ingredient.id) || 0) + ingredient.quantity * batches);
+    }
+    const children = [];
+    let craftTotal = 0;
+    let recipeAvailable = true;
+    for (const [ingredientId, ingredientQuantity] of ingredientTotals) {
+      const child = buildMarketPlan(ingredientId, ingredientQuantity, market, nextPath, counter);
+      if (!child || !Number.isFinite(child.total)) {
+        recipeAvailable = false;
+        break;
+      }
+      craftTotal += child.total;
+      children.push(child);
+    }
+    if (recipeAvailable && Number.isFinite(craftTotal) && (!best || craftTotal < best.total)) {
+      best = {
+        mode: "craft",
+        total: craftTotal,
+        recipeName: recipe.name,
+        batches,
+        output: batches * recipe.output,
+        directOptions,
+        children
+      };
+    }
+  }
+
+  if (best?.mode === "craft") {
+    best.rank = 1 + Math.max(0, ...best.children.map(child => child.rank));
+  }
+  return best
+    ? { id: itemId, name: item.name || getItemName(itemId), quantity, rank: best.rank ?? getItemRank(itemId), ...best }
+    : { id: itemId, name: item.name || getItemName(itemId), quantity, rank: getItemRank(itemId), mode: "unavailable", total: null, directOptions, children: [] };
+}
+
+function formatCoins(value) {
+  if (!Number.isFinite(value)) return "Indisponible";
+  return `${new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(value)} coins`;
+}
+
+function createMarketSummaryCard(label, value, detail, highlighted = false) {
+  const card = document.createElement("article");
+  card.className = `market-summary-card${highlighted ? " is-highlighted" : ""}`;
+  const title = document.createElement("span");
+  title.className = "summary-label";
+  title.textContent = label;
+  const amount = document.createElement("strong");
+  amount.textContent = value;
+  const note = document.createElement("span");
+  note.className = "summary-note";
+  note.textContent = detail;
+  card.append(title, amount, note);
+  return card;
+}
+
+function renderMarketNode(node, depth = 0) {
+  const card = document.createElement("article");
+  card.className = `market-node${depth === 0 ? " market-node-root" : ""}`;
+  card.style.setProperty("--market-depth", String(Math.min(depth, 12)));
+  const header = document.createElement("div");
+  header.className = "market-node-heading";
+  const icon = createItemIcon(node.id, "item-icon-tiny");
+  const name = document.createElement("strong");
+  name.textContent = node.name;
+  const quantity = document.createElement("span");
+  quantity.className = "market-node-quantity";
+  quantity.textContent = `× ${formatNumber(node.quantity)} · rang ${node.rank}`;
+  header.append(icon, name, quantity);
+
+  const detail = document.createElement("p");
+  detail.className = `market-node-detail ${node.mode}`;
+  if (node.mode === "buy") {
+    detail.textContent = `${node.source} · ${formatCoins(node.total)} (${formatCoins(node.total / node.quantity)} / unité)`;
+  } else if (node.mode === "craft") {
+    detail.textContent = `Fabriquer · ${node.recipeName} · ${formatNumber(node.batches)} craft${node.batches > 1 ? "s" : ""} · ${formatCoins(node.total)}`;
+  } else {
+    detail.textContent = "Prix indisponible : aucun achat ni chemin de fabrication coté par l’API.";
+  }
+  card.append(header, detail);
+  if (node.children.length) {
+    const children = document.createElement("div");
+    children.className = "market-node-children";
+    for (const child of node.children) children.append(renderMarketNode(child, depth + 1));
+    card.append(children);
+  }
+  return card;
+}
+
+function renderMarketResults(item, quantity, plan, market) {
+  elements.marketTitle.textContent = item.name;
+  elements.marketBadge.textContent = `${formatNumber(quantity)} demandé${quantity > 1 ? "s" : ""}`;
+  const directAh = market.auctionPrices.get(item.id);
+  const directBazaar = market.bazaarPrices.get(item.id);
+  elements.marketSummary.replaceChildren(
+    createMarketSummaryCard(
+      "ACHAT DIRECT · AH",
+      Number.isFinite(directAh) ? formatCoins(directAh * quantity) : "Aucun BIN coté",
+      Number.isFinite(directAh) ? `${formatCoins(directAh)} / unité` : "Annonce BIN introuvable"
+    ),
+    createMarketSummaryCard(
+      "ACHAT DIRECT · BAZAAR",
+      Number.isFinite(directBazaar) ? formatCoins(directBazaar * quantity) : "Non échangé",
+      Number.isFinite(directBazaar) ? `${formatCoins(directBazaar)} / unité` : "Objet non coté au Bazaar"
+    ),
+    createMarketSummaryCard(
+      "STRATÉGIE LA MOINS CHÈRE",
+      Number.isFinite(plan.total) ? formatCoins(plan.total) : "Prix indisponible",
+      plan.mode === "craft" ? "Fabrication optimisée par composant" : plan.mode === "buy" ? `Achat direct · ${plan.source}` : "Aucun chemin de coût complet",
+      true
+    )
+  );
+  elements.marketPlan.replaceChildren(renderMarketNode(plan));
+  elements.marketResults.hidden = false;
+}
+
+async function compareMarketPrices() {
+  const item = findMatchingMarketItem(elements.marketSearch.value);
+  if (!item) {
+    elements.marketMessage.textContent = "Choisis un objet reconnu dans la liste des suggestions.";
+    return;
+  }
+  const apiKey = elements.marketApiKey.value.trim() || elements.apiKey.value.trim();
+  if (!apiKey) {
+    elements.marketMessage.textContent = "Saisis ta clé API Hypixel pour consulter l’AH.";
+    return;
+  }
+  const quantity = Math.min(999999, Math.max(1, Math.floor(Number(elements.marketQuantity.value) || 1)));
+  elements.marketQuantity.value = String(quantity);
+  const requestId = ++marketRequestId;
+  elements.marketSubmit.disabled = true;
+  elements.marketResults.hidden = true;
+  elements.marketMessage.textContent = "Chargement des prix Bazaar et AH…";
+  try {
+    const wantedIds = collectMarketItemIds(item.id);
+    const market = await fetchMarketPrices(wantedIds, apiKey, message => {
+      if (requestId === marketRequestId) elements.marketMessage.textContent = message;
+    });
+    if (requestId !== marketRequestId) return;
+    const counter = { count: 0, exceeded: false };
+    rankById.clear();
+    const plan = buildMarketPlan(item.id, quantity, market, [], counter);
+    if (counter.exceeded) throw new Error("Le calcul du chemin de fabrication a dépassé la limite de sécurité.");
+    if (!plan) throw new Error("Le calcul du chemin de fabrication a dépassé la limite de sécurité.");
+    renderMarketResults(item, quantity, plan, market);
+    elements.marketMessage.textContent = "Comparaison terminée. Les prix affichés correspondent aux dernières données obtenues.";
+  } catch (error) {
+    if (requestId === marketRequestId) {
+      elements.marketMessage.textContent = `Comparaison impossible : ${error.message}`;
+      console.error("Comparaison des prix AH et Bazaar impossible.", error);
+    }
+  } finally {
+    if (requestId === marketRequestId) elements.marketSubmit.disabled = false;
+  }
+}
+
 async function initialize() {
   elements.visualPack.value = visualPack;
   elements.forgeSlots.value = String(forgeSlots);
@@ -1017,6 +1363,7 @@ async function initialize() {
     items = data.items || [];
     itemById = new Map(items.map(item => [item.id, item]));
     visualsById = new Map(Object.entries(data.visuals || {}));
+    populateMarketItems();
     let forgeDataAvailable = false;
     try {
       const forgeResponse = await fetch("./forge-times.json");
@@ -1251,6 +1598,43 @@ elements.importProfile.addEventListener("click", async () => {
   } finally {
     elements.importProfile.disabled = false;
   }
+});
+
+function selectMode(mode) {
+  const marketIsActive = mode === "market";
+  elements.calculatorMode.hidden = marketIsActive;
+  elements.marketMode.hidden = !marketIsActive;
+  for (const tab of elements.modeTabs) {
+    const active = tab.dataset.mode === mode;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", String(active));
+    tab.tabIndex = active ? 0 : -1;
+  }
+}
+
+for (const tab of elements.modeTabs) {
+  tab.addEventListener("click", () => selectMode(tab.dataset.mode));
+  tab.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const currentIndex = elements.modeTabs.indexOf(tab);
+    const nextIndex = event.key === "Home" ? 0
+      : event.key === "End" ? elements.modeTabs.length - 1
+        : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + elements.modeTabs.length) % elements.modeTabs.length;
+    elements.modeTabs[nextIndex].focus();
+    selectMode(elements.modeTabs[nextIndex].dataset.mode);
+  });
+}
+
+elements.marketApiKey.addEventListener("input", () => {
+  elements.apiKey.value = elements.marketApiKey.value;
+});
+elements.apiKey.addEventListener("input", () => {
+  elements.marketApiKey.value = elements.apiKey.value;
+});
+elements.marketForm.addEventListener("submit", event => {
+  event.preventDefault();
+  compareMarketPrices();
 });
 
 initialize();

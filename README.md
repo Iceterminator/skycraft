@@ -20,6 +20,7 @@ Puis ouvre <http://localhost:8000>.
 - Choix d’une recette alternative lorsqu’un objet a plusieurs recettes.
 - Saisie des stocks possédés, barres de progression et sauvegarde locale dans le navigateur.
 - Choix du rang des ressources à réunir ; les stocks saisis à un autre rang sont convertis selon les recettes affichées (par exemple 160 diamants en 1 diamant enchanté) sans modifier l’inventaire sauvegardé. Le rang choisi est mémorisé localement.
+- Onglet de comparaison AH/Bazaar : compare le meilleur BIN actif et le prix d’achat immédiat au Bazaar au coût de fabrication optimisé récursivement pour chaque composant, avec le rang et la source recommandés affichés dans l’arbre. Requiert une clé API Hypixel ; les prix en mémoire sont réutilisés pendant une minute et la clé n’est pas sauvegardée.
 - Durée estimée de forge selon le nombre de slots disponibles (1 à 5), avec les crafts dépendants lancés après leurs ingrédients et les tâches prêtes réparties entre les slots. L’estimation n’intègre pas Quick Forge et le réglage des slots est sauvegardé localement. Le passage en plein écran conserve les branches déjà ouvertes. Les données de durée sont sous licence MIT ; voir [LICENSE-FORGE-DATA.txt](./LICENSE-FORGE-DATA.txt).
 - Cases à cocher pour marquer les objets de l’arbre comme terminés ; cocher un objet marque aussi ses ingrédients descendants. L’état est sauvegardé localement et ne modifie pas les stocks.
 - Compteur des crafts restant à réaliser affiché en tête de chaque colonne d’ingrédients dépliée.
