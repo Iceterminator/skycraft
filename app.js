@@ -1,6 +1,8 @@
 const STORAGE_KEY = "skycraft.inventory.v1";
 const VISUAL_PACK_KEY = "skycraft.visual-pack.v1";
 const COMPLETED_CRAFTS_KEY = "skycraft.completed-crafts.v1";
+const FORGE_SLOTS_KEY = "skycraft.forge-slots.v1";
+const RESOURCE_RANK_KEY = "skycraft.resource-rank.v1";
 const NBT_INVENTORY_FIELDS = new Set([
   "inv_contents", "ender_chest_contents", "talisman_bag", "wardrobe_contents",
   "bag_contents", "fishing_bag", "potion_bag", "personal_vault_contents",
@@ -21,8 +23,11 @@ const elements = {
   summaryOwned: document.querySelector("#summary-owned"),
   summaryMissing: document.querySelector("#summary-missing"),
   summaryForge: document.querySelector("#summary-forge"),
+  summaryForgeLabel: document.querySelector("#summary-forge-label"),
+  forgeSlots: document.querySelector("#forge-slots"),
   inventoryCount: document.querySelector("#inventory-count"),
   materials: document.querySelector("#materials-list"),
+  resourceRank: document.querySelector("#resource-rank"),
   tree: document.querySelector("#craft-tree"),
   treePanel: document.querySelector(".tree-panel"),
   treeViewport: document.querySelector("#tree-viewport"),
@@ -62,6 +67,10 @@ let baseResourceIds = new Set();
 let inventory = readInventory();
 let visualPack = readVisualPack();
 let completedCrafts = readCompletedCrafts();
+let forgeSlots = readForgeSlots();
+let resourceRank = readResourceRank();
+let rankById = new Map();
+let treeCardsByKey = new Map();
 let selectedItem = null;
 let currentPlan = null;
 let loadedProfiles = [];
@@ -98,6 +107,34 @@ function readCompletedCrafts() {
   }
 }
 
+function readForgeSlots() {
+  try {
+    const saved = Number(localStorage.getItem(FORGE_SLOTS_KEY));
+    return Number.isInteger(saved) ? Math.max(1, Math.min(5, saved)) : 1;
+  } catch (error) {
+    console.warn("Impossible de lire le nombre de slots de forge sauvegardé.", error);
+    return 1;
+  }
+}
+
+function readResourceRank() {
+  try {
+    const saved = Number(localStorage.getItem(RESOURCE_RANK_KEY));
+    return Number.isInteger(saved) && saved >= 0 ? saved : 0;
+  } catch (error) {
+    console.warn("Impossible de lire le rang de ressources sauvegardé.", error);
+    return 0;
+  }
+}
+
+function saveResourceRank() {
+  try {
+    localStorage.setItem(RESOURCE_RANK_KEY, String(resourceRank));
+  } catch (error) {
+    console.error("Impossible de sauvegarder le rang de ressources.", error);
+  }
+}
+
 function saveInventory() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(inventory));
@@ -113,6 +150,15 @@ function saveCompletedCrafts() {
   } catch (error) {
     elements.plannerMessage.textContent = "Le navigateur n’a pas pu sauvegarder les objets terminés localement.";
     console.error("Impossible de sauvegarder les objets terminés.", error);
+  }
+}
+
+function saveForgeSlots() {
+  try {
+    localStorage.setItem(FORGE_SLOTS_KEY, String(forgeSlots));
+  } catch (error) {
+    elements.plannerMessage.textContent = "Le navigateur n’a pas pu sauvegarder les slots de forge localement.";
+    console.error("Impossible de sauvegarder les slots de forge.", error);
   }
 }
 
@@ -260,6 +306,7 @@ function findInventoryItem(query) {
 
 function chooseItem(item) {
   selectedItem = item;
+  rankById.clear();
   elements.search.value = item.name;
   elements.suggestions.hidden = true;
   elements.plannerMessage.textContent = "";
@@ -361,6 +408,145 @@ function makePlan(itemId, required, pool, totals, used, path = []) {
   };
 }
 
+function getItemRank(id, path = new Set()) {
+  const item = itemById.get(id);
+  if (!item || path.has(id)) return 0;
+  if (rankById.has(id)) return rankById.get(id);
+
+  const recipeIndex = Math.min(Number(recipeChoices[id]) || 0, item.recipes.length - 1);
+  const recipe = item.recipes[recipeIndex];
+  if (!recipe) return 0;
+  path.add(id);
+  const ingredientRank = recipe.ingredients.reduce(
+    (highest, ingredient) => Math.max(highest, getItemRank(ingredient.id, path)),
+    0
+  );
+  path.delete(id);
+  const rank = ingredientRank + 1;
+  rankById.set(id, rank);
+  return rank;
+}
+
+function collectMaterialsAtRank(node, maxRank, materials = {}) {
+  for (const child of node.children) {
+    if (!itemById.has(child.id) || getItemRank(child.id) <= maxRank || !child.children.length) {
+      materials[child.id] = (materials[child.id] || 0) + child.required;
+    } else {
+      collectMaterialsAtRank(child, maxRank, materials);
+    }
+  }
+  return materials;
+}
+
+function addStockAtRank(id, amount, pool, maxRank, path = new Set()) {
+  if (amount <= 0) return;
+  const item = itemById.get(id);
+  const rank = getItemRank(id);
+  if (!item || rank <= maxRank || path.has(id)) {
+    pool[id] = (pool[id] || 0) + amount;
+    return;
+  }
+
+  const recipeIndex = Math.min(Number(recipeChoices[id]) || 0, item.recipes.length - 1);
+  const recipe = item.recipes[recipeIndex];
+  if (!recipe || recipe.output <= 0) {
+    pool[id] = (pool[id] || 0) + amount;
+    return;
+  }
+  const batches = Math.floor(amount / recipe.output);
+  const leftover = amount - batches * recipe.output;
+  if (leftover) pool[id] = (pool[id] || 0) + leftover;
+  if (!batches) return;
+
+  path.add(id);
+  for (const ingredient of recipe.ingredients) {
+    addStockAtRank(ingredient.id, ingredient.quantity * batches, pool, maxRank, path);
+  }
+  path.delete(id);
+}
+
+function normalizeInventoryToRank(maxRank) {
+  const pool = {};
+  for (const [id, rawAmount] of Object.entries(inventory)) {
+    const amount = getStock(id, inventory);
+    if (amount > 0) addStockAtRank(id, amount, pool, maxRank);
+  }
+  return pool;
+}
+
+function recipeIngredientCosts(recipe) {
+  const costs = new Map();
+  for (const ingredient of recipe.ingredients) {
+    costs.set(ingredient.id, (costs.get(ingredient.id) || 0) + ingredient.quantity);
+  }
+  return costs;
+}
+
+function availableStockAs(id, pool, maxRank, path = new Set()) {
+  const direct = getStock(id, pool);
+  const item = itemById.get(id);
+  if (!item || getItemRank(id) > maxRank || path.has(id)) return direct;
+
+  const recipeIndex = Math.min(Number(recipeChoices[id]) || 0, item.recipes.length - 1);
+  const recipe = item.recipes[recipeIndex];
+  if (!recipe || recipe.output <= 0) return direct;
+  path.add(id);
+  const batches = [...recipeIngredientCosts(recipe)].reduce((available, [ingredientId, quantity]) =>
+    Math.min(available, Math.floor(availableStockAs(ingredientId, pool, maxRank, path) / quantity)),
+  Number.MAX_SAFE_INTEGER);
+  path.delete(id);
+  return direct + (batches === Number.MAX_SAFE_INTEGER ? 0 : batches * recipe.output);
+}
+
+function consumeStockAs(id, amount, pool, maxRank, path = new Set()) {
+  const direct = Math.min(amount, getStock(id, pool));
+  pool[id] = getStock(id, pool) - direct;
+  const remaining = amount - direct;
+  if (!remaining || path.has(id)) return direct;
+
+  const item = itemById.get(id);
+  if (!item || getItemRank(id) > maxRank) return direct;
+  const recipeIndex = Math.min(Number(recipeChoices[id]) || 0, item.recipes.length - 1);
+  const recipe = item.recipes[recipeIndex];
+  if (!recipe || recipe.output <= 0) return direct;
+
+  path.add(id);
+  const costs = recipeIngredientCosts(recipe);
+  const maxBatches = [...costs].reduce((available, [ingredientId, quantity]) =>
+    Math.min(available, Math.floor(availableStockAs(ingredientId, pool, maxRank, path) / quantity)),
+  Number.MAX_SAFE_INTEGER);
+  const batches = Math.min(
+    Math.ceil(remaining / recipe.output),
+    maxBatches === Number.MAX_SAFE_INTEGER ? 0 : maxBatches
+  );
+  if (!batches) {
+    path.delete(id);
+    return direct;
+  }
+
+  for (const [ingredientId, quantity] of costs) {
+    consumeStockAs(ingredientId, quantity * batches, pool, maxRank, path);
+  }
+  path.delete(id);
+  const produced = batches * recipe.output;
+  const credited = Math.min(remaining, produced);
+  pool[id] = getStock(id, pool) + produced - credited;
+  return direct + credited;
+}
+
+function calculateRankMaterials(plan) {
+  const required = collectMaterialsAtRank(plan.demandTree, resourceRank);
+  const pool = normalizeInventoryToRank(resourceRank);
+  const used = {};
+  const materialIds = Object.keys(required).sort((first, second) =>
+    getItemRank(second) - getItemRank(first) || first.localeCompare(second)
+  );
+  for (const id of materialIds) {
+    used[id] = consumeStockAs(id, required[id], pool, resourceRank);
+  }
+  return { required, used };
+}
+
 function calculatePlan() {
   if (!selectedItem) return null;
   const requested = Math.max(1, Math.min(999999, Math.floor(Number(elements.quantity.value) || 1)));
@@ -369,13 +555,57 @@ function calculatePlan() {
   const totals = {};
   const used = {};
   const tree = makePlan(selectedItem.id, requested, pool, totals, used);
-  return { tree, totals, used, requested, totalForgeSeconds: calculateForgeSeconds(tree) };
+  const demandTree = makePlan(selectedItem.id, requested, {}, {}, {});
+  return { tree, demandTree, totals, used, requested, totalForgeSeconds: calculateForgeSeconds(tree, forgeSlots) };
 }
 
-function calculateForgeSeconds(node) {
-  const duration = forgeTimesById.get(node.id) || 0;
-  const ownTime = node.craftCount > 0 ? duration * node.craftCount : 0;
-  return ownTime + node.children.reduce((sum, child) => sum + calculateForgeSeconds(child), 0);
+function calculateForgeSeconds(root, slots) {
+  const groups = [];
+  let nextGroupId = 0;
+
+  function addNodeJobs(node) {
+    const childGroupIds = node.children.flatMap(addNodeJobs);
+    const duration = forgeTimesById.get(node.id) || 0;
+    if (!duration || !node.craftCount) return childGroupIds;
+    const id = nextGroupId++;
+    groups.push({ id, count: node.craftCount, duration, dependencies: childGroupIds });
+    return [...childGroupIds, id];
+  }
+
+  addNodeJobs(root);
+  if (!groups.length) return 0;
+
+  const completed = new Set();
+  const pending = new Set(groups.map(group => group.id));
+  const remaining = new Map(groups.map(group => [group.id, group.count]));
+  const running = new Map(groups.map(group => [group.id, 0]));
+  const active = [];
+  let elapsed = 0;
+  while (pending.size || active.length) {
+    for (let index = active.length - 1; index >= 0; index -= 1) {
+      if (active[index].finishTime <= elapsed) {
+        const [job] = active.splice(index, 1);
+        running.set(job.groupId, running.get(job.groupId) - 1);
+        if (remaining.get(job.groupId) === 0 && running.get(job.groupId) === 0) {
+          pending.delete(job.groupId);
+          completed.add(job.groupId);
+        }
+      }
+    }
+    const ready = groups
+      .filter(group => pending.has(group.id) && remaining.get(group.id) > 0 && group.dependencies.every(id => completed.has(id)))
+      .sort((first, second) => second.duration - first.duration || first.id - second.id);
+    while (active.length < slots && ready.length) {
+      const group = ready[0];
+      remaining.set(group.id, remaining.get(group.id) - 1);
+      running.set(group.id, running.get(group.id) + 1);
+      active.push({ groupId: group.id, finishTime: elapsed + group.duration });
+      if (remaining.get(group.id) === 0) ready.shift();
+    }
+    if (!active.length) break;
+    elapsed = Math.min(...active.map(job => job.finishTime));
+  }
+  return elapsed;
 }
 
 function sumValues(record) {
@@ -399,11 +629,53 @@ function createProgress(used, required, className = "") {
   return wrapper;
 }
 
+function updateNodeCompleteState(nodeKey, isComplete) {
+  const card = treeCardsByKey.get(nodeKey);
+  if (!card) return;
+  card.classList.toggle("is-complete", isComplete);
+  const checkbox = card.querySelector(".node-complete-toggle input");
+  const label = card.querySelector(".node-complete-toggle");
+  if (checkbox) {
+    checkbox.checked = isComplete;
+    checkbox.setAttribute(
+      "aria-label",
+      `${isComplete ? "Retirer" : "Marquer"} ${card.dataset.itemName} ${isComplete ? "des objets terminés" : "comme terminé"}`
+    );
+  }
+  if (label) label.title = isComplete ? "Objet marqué comme terminé" : "Marquer cet objet comme terminé";
+}
+
+function setSubtreeComplete(node, nodeKey, isComplete) {
+  if (isComplete) completedCrafts[nodeKey] = true;
+  else delete completedCrafts[nodeKey];
+  updateNodeCompleteState(nodeKey, isComplete);
+  if (isComplete) {
+    node.children.forEach((child, index) =>
+      setSubtreeComplete(child, `${nodeKey}/${index}:${child.id}`, true)
+    );
+  }
+}
+
+function updateTreeColumnCounts() {
+  for (const children of elements.tree.querySelectorAll(".node-children")) {
+    const remaining = [...children.querySelectorAll(":scope > .tree-node > .node-card, :scope > .tree-node > summary > .node-card")]
+      .reduce((sum, card) =>
+        sum + (card.classList.contains("is-complete") ? 0 : Number(card.dataset.craftCount) || 0), 0
+      );
+    const label = children.querySelector(":scope > .tree-column-count strong");
+    if (label) label.textContent = formatNumber(remaining);
+  }
+}
+
 function renderTreeNode(node, root = false, nodeKey = `root:${node.id}`) {
   const card = document.createElement("div");
+  treeCardsByKey.set(nodeKey, card);
   const isComplete = completedCrafts[nodeKey] === true;
   card.className = `node-card${root ? " node-card-root" : ""}${isComplete ? " is-complete" : ""}`;
   card.dataset.state = node.cycle ? "error" : node.craftCount ? "craft" : node.remaining ? "missing" : "owned";
+  card.dataset.nodeKey = nodeKey;
+  card.dataset.craftCount = String(node.craftCount || 0);
+  card.dataset.itemName = node.name;
   const top = document.createElement("div");
   top.className = "node-topline";
   top.append(createItemIcon(node.id, "item-icon-small"));
@@ -425,11 +697,8 @@ function renderTreeNode(node, root = false, nodeKey = `root:${node.id}`) {
   completionLabel.append(completionInput, completionText);
   completionInput.addEventListener("click", event => event.stopPropagation());
   completionInput.addEventListener("change", () => {
-    if (completionInput.checked) completedCrafts[nodeKey] = true;
-    else delete completedCrafts[nodeKey];
-    card.classList.toggle("is-complete", completionInput.checked);
-    completionInput.setAttribute("aria-label", `${completionInput.checked ? "Retirer" : "Marquer"} ${node.name} ${completionInput.checked ? "des objets terminés" : "comme terminé"}`);
-    completionLabel.title = completionInput.checked ? "Objet marqué comme terminé" : "Marquer cet objet comme terminé";
+    setSubtreeComplete(node, nodeKey, completionInput.checked);
+    updateTreeColumnCounts();
     saveCompletedCrafts();
   });
   top.append(title, quantity, completionLabel);
@@ -481,6 +750,14 @@ function renderTreeNode(node, root = false, nodeKey = `root:${node.id}`) {
   if (node.children.length) {
     const children = document.createElement("div");
     children.className = "node-children";
+    const countLabel = document.createElement("div");
+    countLabel.className = "tree-column-count";
+    const count = document.createElement("strong");
+    count.textContent = formatNumber(node.children.reduce((sum, child, index) =>
+      sum + (completedCrafts[`${nodeKey}/${index}:${child.id}`] ? 0 : child.craftCount || 0), 0
+    ));
+    countLabel.append(document.createTextNode("À fabriquer à ce rang : "), count);
+    children.append(countLabel);
     node.children.forEach((child, index) =>
       children.append(renderTreeNode(child, false, `${nodeKey}/${index}:${child.id}`))
     );
@@ -489,22 +766,21 @@ function renderTreeNode(node, root = false, nodeKey = `root:${node.id}`) {
   return wrapper;
 }
 
-function renderMaterials(plan) {
-  const materialIds = Object.keys(plan.totals)
-    .filter(id => !itemById.has(id))
+function renderMaterials(materials) {
+  const materialIds = Object.keys(materials.required)
     .sort((a, b) => getItemName(a).localeCompare(getItemName(b), "fr"));
   elements.materials.replaceChildren();
   elements.inventoryCount.textContent = `${materialIds.length} ${materialIds.length > 1 ? "objets" : "objet"}`;
   if (!materialIds.length) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = "Aucune ressource de rang 0 à réunir pour ce craft.";
+    empty.textContent = `Aucune ressource de rang ${resourceRank} à réunir pour ce craft.`;
     elements.materials.append(empty);
     return;
   }
   for (const id of materialIds) {
-    const needed = plan.totals[id];
-    const owned = plan.used[id] || 0;
+    const needed = materials.required[id];
+    const owned = materials.used[id] || 0;
     const row = document.createElement("div");
     row.className = "material-row";
     const info = document.createElement("div");
@@ -516,7 +792,7 @@ function renderMaterials(plan) {
     name.append(createItemIcon(id, "item-icon-tiny"), label);
     const quantity = document.createElement("div");
     quantity.className = "material-quantity";
-    quantity.textContent = `${formatNumber(needed)} requis`;
+    quantity.textContent = `${formatNumber(needed)} requis · rang ${getItemRank(id)}`;
     info.append(name, quantity, createProgress(owned, needed));
     const input = document.createElement("input");
     input.className = "material-stock";
@@ -526,7 +802,7 @@ function renderMaterials(plan) {
     input.step = "1";
     input.inputMode = "numeric";
     input.value = String(getStock(id, inventory));
-    input.setAttribute("aria-label", `Quantité possédée : ${getItemName(id)}`);
+    input.setAttribute("aria-label", `Quantité possédée directement : ${getItemName(id)}`);
     input.addEventListener("change", () => {
       inventory[id] = Math.max(0, Math.floor(Number(input.value) || 0));
       saveInventory();
@@ -538,22 +814,51 @@ function renderMaterials(plan) {
   }
 }
 
+function updateResourceRankOptions(plan) {
+  let maxRank = 0;
+  function visit(node) {
+    maxRank = Math.max(maxRank, getItemRank(node.id));
+    node.children.forEach(visit);
+  }
+  plan.demandTree.children.forEach(visit);
+  resourceRank = Math.min(resourceRank, maxRank);
+  elements.resourceRank.replaceChildren();
+  for (let rank = 0; rank <= maxRank; rank += 1) {
+    const option = document.createElement("option");
+    option.value = String(rank);
+    option.textContent = `Rang ${rank}`;
+    elements.resourceRank.append(option);
+  }
+  elements.resourceRank.value = String(resourceRank);
+  saveResourceRank();
+}
+
+function renderResourceView() {
+  if (!currentPlan) return;
+  const materials = calculateRankMaterials(currentPlan);
+  const materialIds = Object.keys(materials.required);
+  const missing = materialIds.reduce((total, id) =>
+    total + Math.max(0, materials.required[id] - (materials.used[id] || 0)), 0
+  );
+  elements.summaryMaterials.textContent = formatNumber(materialIds.length);
+  elements.summaryOwned.textContent = formatNumber(sumValues(materials.used));
+  elements.summaryMissing.textContent = formatNumber(missing);
+  renderMaterials(materials);
+}
+
 function renderPlan() {
   if (!selectedItem) return;
   currentPlan = calculatePlan();
-  const resourceIds = Object.keys(currentPlan.totals).filter(id => !itemById.has(id));
-  const missing = resourceIds.reduce((total, id) =>
-    total + Math.max(0, currentPlan.totals[id] - (currentPlan.used[id] || 0)), 0
-  );
+  rankById.clear();
   elements.results.hidden = false;
   elements.title.textContent = selectedItem.name;
   elements.badge.textContent = `${formatNumber(currentPlan.requested)} demandé${currentPlan.requested > 1 ? "s" : ""}`;
-  elements.summaryMaterials.textContent = formatNumber(resourceIds.length);
-  elements.summaryOwned.textContent = formatNumber(sumValues(currentPlan.used));
-  elements.summaryMissing.textContent = formatNumber(missing);
   elements.summaryForge.textContent = formatDuration(currentPlan.totalForgeSeconds);
+  elements.summaryForgeLabel.textContent = `TEMPS ESTIMÉ · ${forgeSlots} SLOT${forgeSlots > 1 ? "S" : ""}`;
+  updateResourceRankOptions(currentPlan);
   renderInventory();
-  renderMaterials(currentPlan);
+  renderResourceView();
+  treeCardsByKey = new Map();
   elements.tree.replaceChildren(renderTreeNode(currentPlan.tree, true));
   elements.treeExpand.dataset.expanded = "false";
   elements.treeExpand.textContent = "Tout déplier";
@@ -704,6 +1009,7 @@ async function fetchProfiles(apiKey, uuid) {
 
 async function initialize() {
   elements.visualPack.value = visualPack;
+  elements.forgeSlots.value = String(forgeSlots);
   try {
     const response = await fetch("./recipes.json");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -820,7 +1126,23 @@ elements.quantity.addEventListener("change", () => selectedItem && renderPlan())
 elements.recipeChoice.addEventListener("change", () => {
   if (!selectedItem) return;
   recipeChoices[selectedItem.id] = Number(elements.recipeChoice.value);
+  rankById.clear();
   renderPlan();
+});
+elements.resourceRank.addEventListener("change", () => {
+  resourceRank = Math.max(0, Math.floor(Number(elements.resourceRank.value) || 0));
+  saveResourceRank();
+  renderResourceView();
+});
+elements.forgeSlots.addEventListener("change", () => {
+  forgeSlots = Math.max(1, Math.min(5, Math.floor(Number(elements.forgeSlots.value) || 1)));
+  elements.forgeSlots.value = String(forgeSlots);
+  saveForgeSlots();
+  if (currentPlan) {
+    currentPlan.totalForgeSeconds = calculateForgeSeconds(currentPlan.tree, forgeSlots);
+    elements.summaryForge.textContent = formatDuration(currentPlan.totalForgeSeconds);
+    elements.summaryForgeLabel.textContent = `TEMPS ESTIMÉ · ${forgeSlots} SLOT${forgeSlots > 1 ? "S" : ""}`;
+  }
 });
 function setTreeZoom(value) {
   treeZoom = Math.min(1.5, Math.max(0.6, Math.round(value * 10) / 10));
@@ -859,7 +1181,6 @@ elements.treeFullscreen.addEventListener("click", async () => {
       await document.exitFullscreen();
       updateTreeFullscreenControl();
     } else if (elements.treePanel.requestFullscreen) {
-      expandTree(true);
       await elements.treePanel.requestFullscreen();
       updateTreeFullscreenControl();
       window.setTimeout(fitTreeToWidth, 100);

@@ -82,6 +82,10 @@ h1 span { color: var(--green); }
 .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 15px; }
 .summary-card { min-height: 110px; padding: 17px 18px; border: 1px solid var(--line); border-radius: 10px; background: #171e27; }
 .forge-summary-card strong { font-size: 23px; }
+.forge-slots-control { display: flex; align-items: center; gap: 6px; }
+.forge-slots-control select { min-width: 40px; height: 24px; padding: 0 5px; border: 1px solid #35414d; border-radius: 5px; background: #10161d; color: var(--text); font: 10px "DM Mono", monospace; }
+.tree-column-count { grid-column: 1 / -1; width: auto; padding: 0 0 2px; color: #94a1ad; font: 8px "DM Mono", monospace; }
+.tree-column-count strong { color: var(--green); font-weight: 500; }
 .summary-label { display: block; color: #94a1ad; font-size: 9px; }
 .summary-card strong { display: block; margin: 12px 0 2px; font: 600 27px "Space Grotesk", sans-serif; }
 .summary-note { color: #73808c; font-size: 10px; }
@@ -168,6 +172,7 @@ h1 span { color: var(--green); }
   .summary-label { min-height: 22px; font-size: 8px; line-height: 1.4; }
   .summary-card strong { margin-top: 7px; font-size: 22px; }
   .forge-summary-card strong { font-size: 16px; }
+  .forge-slots-control { gap: 3px; font-size: 8px; }
   .inventory-panel, .tree-panel { padding: 17px 14px; }
   .api-form { grid-template-columns: 1fr; }
   .api-form .secondary-button, .profile-picker, .api-form .import-button, .api-form .inline-message { grid-column: auto; }
@@ -225,6 +230,7 @@ h1 span { color: var(--green); }
 .summary-card { min-height: 84px; padding: 12px 15px; }
 .summary-card strong { margin: 7px 0 0; font-size: 23px; }
 .summary-note { display: none; }
+.summary-card .forge-slots-control { display: flex; }
 .workspace-grid { grid-template-columns: minmax(300px, .8fr) minmax(0, 1.2fr); gap: 10px; }
 .inventory-panel, .tree-panel { padding: 17px; }
 .panel-description { margin-bottom: 11px; }
@@ -349,6 +355,7 @@ h1 span { color: var(--green); }
 .node-progress { margin-top: 6px; }
 .node-progress .stock-progress-label { font-size: 7px; }
 .node-children { position: relative; display: flex; grid-column: 2; flex-direction: column; align-self: stretch; justify-content: flex-start; gap: 12px; width: max-content; min-width: 250px; margin: 0 0 0 0; padding: 12px 0 12px 23px; border: 0; }
+.tree-column-count { grid-column: auto; width: 225px; padding-bottom: 0; }
 .node-children::before { position: absolute; top: 12px; bottom: 12px; left: 0; width: 0; border-left: 1px solid #526371; content: ""; }
 .node-children > .tree-node { position: relative; }
 .node-children > .tree-node::before { position: absolute; top: 50%; left: -23px; width: 23px; border-top: 1px solid #526371; content: ""; }
@@ -372,4 +379,35 @@ h1 span { color: var(--green); }
   .tree-viewport { max-height: 570px; }
   .tree-panel:fullscreen { padding: 12px; }
   .tree-panel:fullscreen .panel-heading h2 { font-size: 15px; }
+}
+
+.materials-header-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.resource-rank-control { display: inline-flex; align-items: center; gap: 6px; color: #aab6c0; font: 10px "DM Mono", monospace; }
+.resource-rank-control select { min-height: 32px; padding: 0 25px 0 8px; border: 1px solid #3b4a55; border-radius: 6px; background: #10161d; color: var(--text); font: 11px "DM Sans", sans-serif; }
+.resource-rank-control select:focus { border-color: #82ad52; outline: none; }
+.materials-header-actions .inventory-count { white-space: nowrap; }
+.field-label, .suggestion-option small, .field-hint, .inventory-footer, .page-footer { font-size: 10px; }
+.panel-description { font-size: 12px; }
+.summary-label { font-size: 10px; }
+.material-name { font-size: 12px; }
+.material-quantity { font-size: 10px; }
+.material-stock { font-size: 12px; }
+.stock-progress-label { font-size: 9px; }
+.tree-column-count { font: 10px "DM Mono", monospace; }
+.tree-hint { font-size: 11px; }
+.node-title { font-size: 12px; }
+.node-quantity { font-size: 10px; }
+.node-detail { font-size: 10px; }
+.node-progress .stock-progress-label { font-size: 9px; }
+.node-forge-time { font-size: 9px; }
+.tree-control-button, .tree-zoom-value { font-size: 10px; }
+.tree-legend { font-size: 10px; }
+.tree-branch:not([open]) > .tree-summary .node-detail::after,
+.tree-branch[open] > .tree-summary .node-detail::after { font-size: 8px; }
+
+@media (max-width: 460px) {
+  .materials-header-actions { gap: 5px; }
+  .resource-rank-control { gap: 4px; font-size: 9px; }
+  .resource-rank-control select { min-height: 30px; padding: 0 20px 0 6px; }
+  .materials-header-actions .inventory-count { padding: 6px 7px; font-size: 9px; }
 }

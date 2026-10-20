@@ -19,8 +19,10 @@ Puis ouvre <http://localhost:8000>.
 - Arbre de craft en vue horizontale avec branches repliables, zoom, défilement et mode plein écran.
 - Choix d’une recette alternative lorsqu’un objet a plusieurs recettes.
 - Saisie des stocks possédés, barres de progression et sauvegarde locale dans le navigateur.
-- Durée de forge affichée pour les objets concernés dans l’arbre et cumulée dans le résumé du plan. Le cumul suppose une forge séquentielle et n’intègre ni Quick Forge ni les emplacements utilisés en parallèle. Les données correspondantes sont sous licence MIT ; voir [LICENSE-FORGE-DATA.txt](./LICENSE-FORGE-DATA.txt).
-- Cases à cocher pour marquer les objets de l’arbre comme terminés ; leur état est sauvegardé localement et ne modifie pas les stocks.
+- Choix du rang des ressources à réunir ; les stocks saisis à un autre rang sont convertis selon les recettes affichées (par exemple 160 diamants en 1 diamant enchanté) sans modifier l’inventaire sauvegardé. Le rang choisi est mémorisé localement.
+- Durée estimée de forge selon le nombre de slots disponibles (1 à 5), avec les crafts dépendants lancés après leurs ingrédients et les tâches prêtes réparties entre les slots. L’estimation n’intègre pas Quick Forge et le réglage des slots est sauvegardé localement. Le passage en plein écran conserve les branches déjà ouvertes. Les données de durée sont sous licence MIT ; voir [LICENSE-FORGE-DATA.txt](./LICENSE-FORGE-DATA.txt).
+- Cases à cocher pour marquer les objets de l’arbre comme terminés ; cocher un objet marque aussi ses ingrédients descendants. L’état est sauvegardé localement et ne modifie pas les stocks.
+- Compteur des crafts restant à réaliser affiché en tête de chaque colonne d’ingrédients dépliée.
 - Inventaire manuel accessible en haut de la page : son sélecteur ne propose que les ressources de base non craftables utilisées par les recettes. Les objets intermédiaires craftables restent pris en compte dans le calcul et l’import Hypixel.
 - Choix des icônes FurSky Reborn ou Hypixel SkyBlock, avec repli sur les textures disponibles si une icône manque. Les images FurSky sont chargées depuis le dépôt public [FurfSky Reborn](https://github.com/furfsky/reborn) ; les images du pack restent la propriété de leurs ayants droit.
 - Import facultatif des inventaires d’un profil via l’API Hypixel (clé API et UUID Minecraft).

@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#10151c">
     <meta name="description" content="Planificateur de craft Hypixel SkyBlock : recettes, arbre de craft, stocks et progression.">
     <title>SkyCraft — calculateur de craft Hypixel SkyBlock</title>
-    <link rel="stylesheet" href="styles.css?v=tree-top-align-20261020">
-    <script src="app.js?v=forge-tracking-20261020" defer></script>
+    <link rel="stylesheet" href="styles.css?v=resource-ranks-20261020">
+    <script src="app.js?v=resource-ranks-20261020" defer></script>
   </head>
   <body>
     <header class="topbar">
@@ -87,16 +87,30 @@
           <article class="summary-card"><span class="summary-label">MATÉRIAUX À PRÉVOIR</span><strong id="summary-materials">0</strong><span class="summary-note">types de ressources</span></article>
           <article class="summary-card"><span class="summary-label">DÉJÀ DANS TON STOCK</span><strong id="summary-owned">0</strong><span class="summary-note">unités utilisées</span></article>
           <article class="summary-card"><span class="summary-label">ENCORE NÉCESSAIRE</span><strong id="summary-missing">0</strong><span class="summary-note">unités à trouver</span></article>
-          <article class="summary-card forge-summary-card"><span class="summary-label">TEMPS CUMULÉ DE FORGE</span><strong id="summary-forge">0 s</strong><span class="summary-note">hors Quick Forge et forge parallèle</span></article>
+          <article class="summary-card forge-summary-card">
+            <span id="summary-forge-label" class="summary-label">TEMPS ESTIMÉ · 1 SLOT</span>
+            <strong id="summary-forge">0 s</strong>
+            <label class="summary-note forge-slots-control" for="forge-slots">Slots disponibles
+              <select id="forge-slots" aria-label="Nombre de slots de forge disponibles">
+                <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+              </select>
+            </label>
+          </article>
         </div>
 
         <div class="workspace-grid">
           <section class="panel inventory-panel" aria-labelledby="inventory-title">
             <div class="panel-heading compact-heading">
               <div><p class="section-index">STOCKS POUR CE CRAFT</p><h2 id="inventory-title">Ressources à réunir</h2></div>
-              <span class="inventory-count" id="inventory-count"></span>
+              <div class="materials-header-actions">
+                <label class="resource-rank-control" for="resource-rank">
+                  <span>RANG</span>
+                  <select id="resource-rank" aria-label="Rang des ressources à afficher"></select>
+                </label>
+                <span class="inventory-count" id="inventory-count"></span>
+              </div>
             </div>
-            <p class="panel-description">Seules les ressources de rang 0 (matières premières) sont listées. Les stocks se mettent à jour automatiquement.</p>
+            <p class="panel-description">Choisis le rang des ressources à afficher. Les stocks de rangs différents sont convertis selon les recettes, sans modifier ton inventaire. Le champ modifie le stock exact de l’objet ; la progression inclut les équivalences craftables.</p>
             <div id="materials-list" class="materials-list"></div>
             <div class="inventory-footer"><span><span class="status-dot"></span> Stock sauvegardé sur cet appareil</span><button id="clear-inventory" class="text-button" type="button">Tout effacer</button></div>
           </section>
@@ -106,7 +120,7 @@
               <div><p class="section-index">04 / VISUALISATION</p><h2 id="tree-title">Arbre de craft</h2></div>
               <span class="tree-icon" aria-hidden="true">⌘</span>
             </div>
-            <p class="tree-hint">Lis l’arbre de gauche à droite, ouvre les branches et coche les objets terminés. Les durées sont cumulées sans bonus Quick Forge.</p>
+            <p class="tree-hint">Lis l’arbre de gauche à droite, ouvre les branches et coche les objets terminés. Le temps estimé tient compte des slots disponibles, sans bonus Quick Forge.</p>
             <div id="recipe-choice-wrap" class="recipe-choice-wrap" hidden>
               <label for="recipe-choice" class="field-label">RECETTE À UTILISER</label>
               <select id="recipe-choice"></select>
